@@ -848,11 +848,11 @@ uv sync
 uv run python proto/scripts/gen.py
 uv run python data/seed_warehouse.py && uv run python data/seed_users.py
 uv run uvicorn vdagent_backend.app:app --port 8000
-uv run python -m vdagent_data                     # ×5 (or: make agents); tokens + LLM settings from .env
+uv run python -m vdagent_data                     # ×5, one per terminal (or: make agent-<name>); tokens + LLM settings from .env
 cd frontend && npm install && npm run dev
 ```
 
-Or with the root `Makefile`: `make reset-db`, `make backend`, `make agents` (or `make agent-<name>`),
+Or with the root `Makefile`: `make reset-db`, `make backend`, one `make agent-<name>` per agent,
 in any order between backend and agents (agents retry). A remote agent: BE with
 `VDAGENT_AGENT_LISTEN=0.0.0.0:50050`, `VDAGENT_MCP_PUBLIC_URL=http://<be-host>:8000/mcp`,
 `make backend HOST=0.0.0.0`; on the agent machine `agents/<name>/.env` with `VDAGENT_BACKEND`, the

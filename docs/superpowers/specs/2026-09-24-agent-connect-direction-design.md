@@ -383,8 +383,8 @@ Removed: health `SERVING`, `GRPC_PORT` validation.
 - `uv run pytest` passes (backend + all agent packages); no reference to `GRPC_PORT`,
   `AgentClients`, `grpc_health`, or an agent `address` entry remains in agents, backend, compose, Makefile,
   or docs (outside git history).
-- Local: `make reset-db`, `make backend`, `make agents` (in any order between backend and
-  agents) → all five healthy in the UI; the main spec §13 E2E smoke passes.
+- Local: `make reset-db`, `make backend`, one `make agent-<name>` per agent (in any order between
+  backend and agents) → all five healthy in the UI; the main spec §13 E2E smoke passes.
 - Stopping one agent turns it unhealthy in the UI within keepalive detection time; restarting it
   turns it healthy without restarting the Backend.
 - An agent with a shell-exported `OPENAI_API_KEY` and a different key in `agents/<name>/.env`

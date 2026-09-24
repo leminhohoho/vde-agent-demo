@@ -8,13 +8,12 @@ WAREHOUSE_DB ?= var/warehouse.db
 
 .DEFAULT_GOAL := help
 AGENT_TARGETS := $(addprefix agent-,$(AGENTS))
-.PHONY: help backend agents reset-db $(AGENT_TARGETS)
+.PHONY: help backend reset-db $(AGENT_TARGETS)
 
 help:
 	@echo "make backend        start the backend: HTTP on $(HOST):8000, agent hub per agent_listen (default 127.0.0.1:50050)"
 	@echo "                    HOST=0.0.0.0 serves HTTP (UI, MCP) to other machines"
 	@echo "make agent-<name>   start one agent ($(AGENTS)); it dials the hub at VDAGENT_BACKEND (default localhost:50050)"
-	@echo "make agents         start all agents in this terminal (before or after the backend: they retry)"
 	@echo "make reset-db       delete and reseed $(BACKEND_DB) and $(WAREHOUSE_DB) (stop the stack first)"
 
 backend:
@@ -23,9 +22,6 @@ backend:
 # Static pattern rule: works with .PHONY, unlike a plain `agent-%` rule.
 $(AGENT_TARGETS): agent-%:
 	uv run python -m vdagent_$*
-
-agents:
-	$(MAKE) -j $(words $(AGENTS)) $(AGENT_TARGETS)
 
 reset-db:
 	rm -f $(BACKEND_DB) $(BACKEND_DB)-wal $(BACKEND_DB)-shm $(WAREHOUSE_DB) $(WAREHOUSE_DB)-wal $(WAREHOUSE_DB)-shm

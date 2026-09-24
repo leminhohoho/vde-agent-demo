@@ -50,16 +50,17 @@ run on any machine that can reach the Backend — no agent listens on a port.
 | `make` / `make help` | Lists the targets. |
 | `make backend` | Starts the backend (API, SSE, MCP, built UI) on http://localhost:8000 and the agent hub on `127.0.0.1:50050` (`agent_listen`). `HOST=0.0.0.0` serves HTTP to other machines. |
 | `make agent-<name>` | Starts one agent (`orchestrator`, `data`, `compare`, `insight`, `report`); it dials the hub at `VDAGENT_BACKEND` (default `localhost:50050`) and reconnects with backoff when the session drops. |
-| `make agents` | Starts all five agents in one terminal; Ctrl-C stops them all. |
 | `make reset-db` | Deletes `var/backend.db` and `var/warehouse.db` and reseeds them (demo users Alice and Bob, the deterministic warehouse). |
 
 A typical local session:
 
 ```
-make reset-db          # first run, or to start again from clean data
-make backend           # terminal 1
-make agents            # terminal 2 (or one `make agent-<name>` per terminal); before or after the backend
-cd frontend && npm install && npm run dev   # terminal 3 → http://localhost:5173
+make reset-db              # first run, or to start again from clean data
+make backend               # terminal 1
+make agent-orchestrator    # one terminal per agent: orchestrator, data, compare, insight, report
+make agent-data            # (before or after the backend: agents retry until it is up)
+…
+cd frontend && npm install && npm run dev   # another terminal → http://localhost:5173
 ```
 
 An agent is healthy in the UI while its session is connected. Stopping an agent turns it

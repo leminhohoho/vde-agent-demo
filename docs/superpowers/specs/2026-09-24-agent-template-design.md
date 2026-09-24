@@ -355,7 +355,7 @@ Sections:
   `VDAGENT_BACKEND: backend:50050`, `env_file: .env` (tokens + LLM settings), `depends_on: backend`;
   the backend service `expose`s 50050 (not published) and also reads `.env`. `config.compose.yaml`:
   `agent_listen: 0.0.0.0:50050`, agents without addresses. `.dockerignore` excludes `**/.env`.
-- Local run: `make backend`, `make agent-<name>` / `make agents` (§9.1).
+- Local run: `make backend`, one `make agent-<name>` per agent (§9.1).
 
 ### 9.1 Root `Makefile`
 
@@ -369,7 +369,6 @@ run the frontend.
 | `make` / `make help` | Lists the targets below with one-line descriptions (default goal). |
 | `make backend` | `uv run uvicorn vdagent_backend.app:app --host $(HOST) --port 8000` (`HOST ?= 127.0.0.1`). Port fixed at 8000 because `mcp_public_url` in `backend/config.yaml` points there. The agent hub listens on `agent_listen`. |
 | `make agent-<name>` | Starts one agent: `uv run python -m vdagent_<name>`, for `<name>` in `AGENTS`; it dials the hub and retries, so it may start before the backend. Unknown name → make's "No rule to make target" error. |
-| `make agents` | Starts all five in one terminal: `$(MAKE) -j <n> agent-orchestrator agent-data …`; Ctrl-C stops all. Output interleaves; each log line carries the agent's logger name. |
 | `make reset-db` | Deletes `$(BACKEND_DB)` and `$(WAREHOUSE_DB)` including their `-wal`/`-shm` files, then reseeds: `data/seed_warehouse.py $(WAREHOUSE_DB)`, `data/seed_users.py $(BACKEND_DB)`. Stop the backend and agents first — deleting SQLite files under a running backend leaves it on stale file handles. |
 
 Shape:
@@ -383,12 +382,11 @@ WAREHOUSE_DB ?= var/warehouse.db
 
 .DEFAULT_GOAL := help
 AGENT_TARGETS := $(addprefix agent-,$(AGENTS))
-.PHONY: help backend agents reset-db $(AGENT_TARGETS)
+.PHONY: help backend reset-db $(AGENT_TARGETS)
 
 help:
 	@echo "make backend        start the backend: HTTP on $(HOST):8000, agent hub per agent_listen"
 	@echo "make agent-<name>   start one agent ($(AGENTS)); it dials the hub at VDAGENT_BACKEND"
-	@echo "make agents         start all agents in this terminal (before or after the backend: they retry)"
 	@echo "make reset-db       delete and reseed var/backend.db and var/warehouse.db (stop the stack first)"
 
 backend:
@@ -396,9 +394,6 @@ backend:
 
 $(AGENT_TARGETS): agent-%:          # static pattern rule: works with .PHONY, unlike a plain agent-% rule
 	uv run python -m vdagent_$*
-
-agents:
-	$(MAKE) -j $(words $(AGENTS)) $(AGENT_TARGETS)
 
 reset-db:
 	rm -f $(BACKEND_DB) $(BACKEND_DB)-wal $(BACKEND_DB)-shm $(WAREHOUSE_DB) $(WAREHOUSE_DB)-wal $(WAREHOUSE_DB)-shm
@@ -424,7 +419,7 @@ New file (none exists today). Sections:
    ```
    make reset-db          # first run, or to start from clean data
    make backend           # terminal 1
-   make agents            # terminal 2 (or: make agent-data, … one per terminal)
+   make agent-data        # one terminal per agent (make agent-orchestrator, …)
    cd frontend && npm install && npm run dev   # terminal 3
    ```
    and the note that `reset-db` requires the backend and agents to be stopped.
@@ -483,7 +478,7 @@ In `2026-09-24-vdagent-design.md`:
 - §7.1: entrypoint `python -m vdagent_<name>`; env: host settings + LLM vars (LiteLLM agents);
   no `AGENT_NAME`; prompts at `vdagent_<name>/prompts/{system,compact}.md`.
 - §7.2/§7.3: note they describe the LiteLLM agents; the transport contract is this spec §3–§4.
-- §12: local-run block uses `make reset-db`, `make backend`, `make agents` (this spec §9.1);
+- §12: local-run block uses `make reset-db`, `make backend`, `make agent-<name>` (this spec §9.1);
   compose paragraph per §9.
 - §13 *Agent runtime*: point to this spec §10.
 
@@ -496,6 +491,6 @@ In `2026-09-24-vdagent-design.md`:
 - `docker compose up --build` starts all services healthy; the main spec §13 E2E smoke passes
   (Orchestrator → Data → Compare → Insight → Report, saved report with a chart).
 - With the backend and agents stopped, `make reset-db` recreates both databases (demo users
-  present, warehouse rebuilt); `make backend` then `make agents` bring up a stack where every
+  present, warehouse rebuilt); `make backend` then one `make agent-<name>` per agent bring up a stack where every
   agent reports healthy in the UI and the E2E smoke passes; `make agent-data` starts only Data;
   `make help` lists all targets.

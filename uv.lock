@@ -8,6 +8,7 @@ members = [
     "vdagent-agent-template",
     "vdagent-agents",
     "vdagent-backend",
+    "vdagent-orchestrator",
     "vdagent-proto",
 ]
 
@@ -1360,6 +1361,7 @@ dependencies = [
     { name = "vdagent-agent-template" },
     { name = "vdagent-agents" },
     { name = "vdagent-backend" },
+    { name = "vdagent-orchestrator" },
     { name = "vdagent-proto" },
 ]
 
@@ -1376,6 +1378,7 @@ requires-dist = [
     { name = "vdagent-agent-template", editable = "agents/_template" },
     { name = "vdagent-agents", editable = "agents/_legacy" },
     { name = "vdagent-backend", editable = "backend" },
+    { name = "vdagent-orchestrator", editable = "agents/orchestrator" },
     { name = "vdagent-proto", editable = "proto" },
 ]
 
@@ -1457,6 +1460,29 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "sse-starlette", specifier = ">=2.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "vdagent-proto", editable = "proto" },
+]
+
+[[package]]
+name = "vdagent-orchestrator"
+version = "0.1.0"
+source = { editable = "agents/orchestrator" }
+dependencies = [
+    { name = "grpcio" },
+    { name = "grpcio-health-checking" },
+    { name = "litellm" },
+    { name = "mcp" },
+    { name = "python-dotenv" },
+    { name = "vdagent-proto" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "grpcio", specifier = ">=1.66" },
+    { name = "grpcio-health-checking", specifier = ">=1.66" },
+    { name = "litellm", specifier = ">=1.50" },
+    { name = "mcp", specifier = ">=1.9" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "vdagent-proto", editable = "proto" },
 ]
 

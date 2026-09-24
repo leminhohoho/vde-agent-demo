@@ -3,19 +3,20 @@ name = "vdagent"
 version = "0.1.0"
 description = "vdagent PoC: multi-agent analytics assistant (uv workspace root)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["vdagent-proto", "vdagent-backend", "vdagent-agents", "vdagent-agent-template"]
+dependencies = ["vdagent-proto", "vdagent-backend", "vdagent-agents", "vdagent-agent-template", "vdagent-orchestrator"]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["proto", "backend", "agents/_legacy", "agents/_template"]
+members = ["proto", "backend", "agents/_legacy", "agents/_template", "agents/orchestrator"]
 
 [tool.uv.sources]
 vdagent-proto = { workspace = true }
 vdagent-backend = { workspace = true }
 vdagent-agents = { workspace = true }
 vdagent-agent-template = { workspace = true }
+vdagent-orchestrator = { workspace = true }
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "grpcio-tools>=1.66"]
 
@@ -28,4 +29,4 @@ testpaths = ["backend/tests", "agents"]
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"
-extraPaths = ["proto", "backend", "agents/_legacy", "agents/_template"]
+extraPaths = ["proto", "backend", "agents/_legacy", "agents/_template", "agents/orchestrator"]

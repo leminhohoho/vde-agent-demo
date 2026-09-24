@@ -14,25 +14,78 @@ run on any machine that can reach the Backend — no agent listens on a port.
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/) (Python 3.12 is picked up from `.python-version`), GNU make, Node 22 for the frontend.
-- One `.env` per agent, `agents/<name>/.env` (gitignored, never copied into Docker images), with
-  its hub address and model endpoint (any OpenAI-compatible server with tool calling):
-
-  ```
-  VDAGENT_BACKEND=localhost:50050
-  OPENAI_API_KEY=…
-  OPENAI_BASE_URL=https://…/v1
-  LLM_MODEL=…
-  LLM_TIMEOUT_S=120
-  ```
-
-  The Backend needs no `.env`; an optional `backend/.env` can hold `VDAGENT_*` overrides.
-
 - First time only:
 
   ```
   uv sync
   uv run python proto/scripts/gen.py      # gRPC stubs (gitignored)
+  for a in orchestrator data compare insight report; do cp -n agents/$a/.env.example agents/$a/.env; done
   ```
+
+  Then fill in `OPENAI_API_KEY`, `OPENAI_BASE_URL` and `LLM_MODEL` in each `agents/<name>/.env`
+  (see [Environment variables](#environment-variables)).
+
+## Environment variables
+
+Each component reads its own `.env` file. Every `.env` is gitignored and excluded from Docker
+images; commit changes to the `.env.example` next to it instead.
+
+| File | Needed? | Create it with |
+|---|---|---|
+| `agents/<name>/.env`, one per agent | **Yes**, for each of the five agents | `cp agents/<name>/.env.example agents/<name>/.env`, then fill in the LLM settings |
+| `backend/.env` | No: the Backend runs on `backend/config.yaml` alone | `cp backend/.env.example backend/.env`, then uncomment what you need |
+| `agents/_template/.env` | Only to run the template's echo agent | `cp agents/_template/.env.example agents/_template/.env` |
+
+### Agents (`agents/<name>/.env`)
+
+| Variable | Required | Default | Meaning |
+|---|---|---|---|
+| `OPENAI_API_KEY` | yes | — | API key for the model endpoint. |
+| `OPENAI_BASE_URL` | yes | — | Base URL of an OpenAI-compatible endpoint, e.g. `https://…/v1`. |
+| `LLM_MODEL` | yes | — | Model name served by that endpoint. It **must support tool calling**. |
+| `LLM_TIMEOUT_S` | no | `120` | Timeout per LLM call, in seconds (must be > 0). |
+| `VDAGENT_BACKEND` | no | `localhost:50050` | The Backend's agent hub, `host:port`. Docker compose sets `backend:50050`. |
+
+The five agents need the same variables. They may share one model or each use their own.
+
+- **Missing required variable:** the agent exits with code 2, naming the variable.
+- **Precedence**, highest first: `agents/<name>/.env`, then the process environment, then any
+  `.env` in a folder above the agent (it only fills variables still unset). So a key exported in
+  your shell cannot shadow the one in the agent's file.
+- **Identity:** an agent identifies itself only by its name (`NAME` in its `agent.py`). There is no
+  credential. If the Backend does not list the name in `backend/config.yaml`, the agent exits
+  with code 2.
+
+### Backend (`backend/.env`, optional)
+
+Each variable overrides the matching key of `backend/config.yaml`. The process environment wins
+over the file.
+
+| Variable | Default (`config.yaml`) | Meaning |
+|---|---|---|
+| `VDAGENT_AGENT_LISTEN` | `127.0.0.1:50050` | Address the agent hub listens on. `0.0.0.0:50050` accepts agents from other machines. |
+| `VDAGENT_MCP_PUBLIC_URL` | `http://localhost:8000/mcp` | MCP URL handed to agents; it must be reachable from every agent machine. |
+| `VDAGENT_BACKEND_DB` | `./var/backend.db` | Backend SQLite file (relative to where the backend is started). |
+| `VDAGENT_WAREHOUSE_DB` | `./var/warehouse.db` | Warehouse SQLite file. |
+| `VDAGENT_FRONTEND_DIST` | `./frontend/dist` | Built frontend, served at `/` if it exists. |
+| `VDAGENT_MAX_DEPTH` | `4` | Maximum agent-call depth. |
+| `VDAGENT_MAX_STEPS` | `12` | LLM calls per turn, sent to agents. |
+| `VDAGENT_CONFIG` | `backend/config.yaml` | Which YAML to load. Set it in the shell: it has no effect inside `backend/.env`, which is looked up next to the chosen config file. |
+
+`HOST` (for `make backend HOST=0.0.0.0`) is a make variable, not an environment setting: it is the
+interface the HTTP server (UI, API, MCP) binds to.
+
+### By setup
+
+- **Everything on one machine:** create the five `agents/<name>/.env` files and fill in the LLM
+  settings. No Backend file is needed.
+- **Docker compose:** the same five agent files; they must exist or `docker compose up` fails.
+  Compose overrides `VDAGENT_BACKEND` with `backend:50050` and configures the backend with
+  `backend/config.compose.yaml`; `backend/.env` is not used.
+- **Remote agents:** on the Backend machine set `VDAGENT_AGENT_LISTEN=0.0.0.0:50050` and
+  `VDAGENT_MCP_PUBLIC_URL=http://<backend-host>:8000/mcp` (shell or `backend/.env`) and run
+  `make backend HOST=0.0.0.0`. On each agent machine set `VDAGENT_BACKEND=<backend-host>:50050` in
+  that agent's `.env`. See [Remote agent](#remote-agent).
 
 ## Makefile usage
 
@@ -73,17 +126,15 @@ Run an agent on another machine (or another checkout) against this Backend:
    VDAGENT_AGENT_LISTEN=0.0.0.0:50050 VDAGENT_MCP_PUBLIC_URL=http://<backend-host>:8000/mcp make backend HOST=0.0.0.0
    ```
 
-2. On the agent machine, in a checkout, create `agents/<name>/.env` (the same file as locally, with
-   the Backend's address):
+2. On the agent machine, in a checkout, create the agent's `.env` from its example and point it at
+   the Backend:
 
    ```
-   VDAGENT_BACKEND=<backend-host>:50050
-   OPENAI_API_KEY=…
-   OPENAI_BASE_URL=https://…/v1
-   LLM_MODEL=…
+   uv sync && uv run python proto/scripts/gen.py
+   cp agents/<name>/.env.example agents/<name>/.env
+   # edit agents/<name>/.env: VDAGENT_BACKEND=<backend-host>:50050, OPENAI_API_KEY, OPENAI_BASE_URL, LLM_MODEL
+   make agent-<name>
    ```
-
-   then `uv sync && uv run python proto/scripts/gen.py && make agent-<name>`.
 
 ### Notes on connecting from anywhere
 

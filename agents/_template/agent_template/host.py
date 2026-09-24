@@ -14,7 +14,7 @@ import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from vdagent_proto import agent_pb2, agent_pb2_grpc
 
-from .contract import Agent, McpEndpoint, Message, Peer, ToolCall
+from .contract import SEND_TO_AGENT, Agent, ContractViolation, McpEndpoint, Message, Peer, ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +79,44 @@ class _StreamContext:
         self._write_lock = asyncio.Lock()
         self._pending: dict[str, asyncio.Future[agent_pb2.AgentCallResult]] = {}
         self._closed: BaseException | None = None
-        self.final_content = ""
+        # Ordering guard (R2–R5), about the latest assistant step.
+        self._calls: dict[str, str] = {}  # tool_call id → tool name
+        self._unresolved: set[str] = set()
+        self._calling: set[str] = set()  # send_to_agent calls waiting for their reply
+        self._called: set[str] = set()
+        self._last_step_had_calls: bool | None = None  # None: no step emitted yet
+        self._final_content = ""
+        self._ended = False
+        self.violation: ContractViolation | None = None
+
+    def _violate(self, message: str) -> ContractViolation:
+        violation = ContractViolation(message)
+        if self.violation is None:
+            self.violation = violation
+        return violation
+
+    def _check_open(self, what: str) -> None:
+        if self._ended:
+            raise self._violate(f"{what}: the turn already ended when invoke returned (R5)")
 
     async def _write(self, frame: agent_pb2.AgentFrame) -> None:
         async with self._write_lock:
             await self._context.write(frame)
 
     async def emit_assistant(self, content: str, tool_calls: Sequence[ToolCall] = ()) -> None:
+        self._check_open("emit_assistant")
+        if self._unresolved:
+            raise self._violate(
+                f"emit_assistant: tool calls {sorted(self._unresolved)} of the previous step have no result yet (R2)"
+            )
+        ids = [tc.id for tc in tool_calls]
+        if any(not i for i in ids) or len(set(ids)) != len(ids):
+            raise self._violate(f"emit_assistant: tool-call ids must be non-empty and unique, got {ids} (R2)")
+        self._calls = {tc.id: tc.name for tc in tool_calls}
+        self._unresolved = set(ids)
+        self._called = set()
+        self._last_step_had_calls = bool(ids)
+        self._final_content = content
         await self._write(
             agent_pb2.AgentFrame(
                 message=agent_pb2.Message(
@@ -98,9 +129,15 @@ class _StreamContext:
                 )
             )
         )
-        self.final_content = content
 
     async def emit_tool_result(self, tool_call_id: str, content: str) -> None:
+        what = f"emit_tool_result({tool_call_id!r})"
+        self._check_open(what)
+        if tool_call_id in self._calling:
+            raise self._violate(f"{what}: its call_agent is still waiting for the reply (R4)")
+        if tool_call_id not in self._unresolved:
+            raise self._violate(f"{what}: not an unresolved tool call of the latest assistant step (R3)")
+        self._unresolved.discard(tool_call_id)
         await self._write(
             agent_pb2.AgentFrame(
                 message=agent_pb2.Message(role=agent_pb2.TOOL, content=content, tool_call_id=tool_call_id)
@@ -108,8 +145,21 @@ class _StreamContext:
         )
 
     async def call_agent(self, tool_call_id: str, target: str, message: str) -> str:
+        what = f"call_agent({tool_call_id!r})"
+        self._check_open(what)
+        name = self._calls.get(tool_call_id)
+        if name is None:
+            raise self._violate(f"{what}: not a tool call of the latest assistant step (R4)")
+        if name != SEND_TO_AGENT:
+            raise self._violate(f"{what}: tool call is {name!r}, not {SEND_TO_AGENT} (R4)")
+        if tool_call_id not in self._unresolved:
+            raise self._violate(f"{what}: tool call already has a result (R4)")
+        if tool_call_id in self._called:
+            raise self._violate(f"{what}: already called once (R4)")
         if self._closed is not None:
             raise self._closed
+        self._called.add(tool_call_id)
+        self._calling.add(tool_call_id)
         future: asyncio.Future[agent_pb2.AgentCallResult] = asyncio.get_running_loop().create_future()
         self._pending[tool_call_id] = future
         try:
@@ -121,6 +171,7 @@ class _StreamContext:
             result = await future
         finally:
             self._pending.pop(tool_call_id, None)
+            self._calling.discard(tool_call_id)
         if result.ok or result.content.startswith("error:"):
             return result.content
         return f"error: {result.content or f'call to {target} failed'}"
@@ -154,7 +205,15 @@ class _StreamContext:
         self._pending.clear()
 
     async def finish(self) -> None:
-        await self._write(agent_pb2.AgentFrame(final=agent_pb2.Final(content=self.final_content)))
+        """End the turn after `invoke` returned: enforce R5, then send `final`."""
+        self._ended = True
+        if self.violation is not None:
+            raise self.violation
+        if self._unresolved:
+            raise self._violate(f"invoke returned with unresolved tool calls {sorted(self._unresolved)} (R5)")
+        if self._last_step_had_calls is not False:
+            raise self._violate("invoke returned without a final assistant step (one without tool calls) (R5)")
+        await self._write(agent_pb2.AgentFrame(final=agent_pb2.Final(content=self._final_content)))
 
 
 class _AgentServicer(agent_pb2_grpc.AgentServicer):
@@ -175,6 +234,9 @@ class _AgentServicer(agent_pb2_grpc.AgentServicer):
             error: BaseException = exc
         finally:
             reader.cancel()
+        if ctx.violation is not None:
+            logger.error("[%s] contract violation: %s", ctx.invocation_id, ctx.violation)
+            await context.abort(grpc.StatusCode.INTERNAL, f"contract violation: {ctx.violation}")
         logger.error("[%s] turn failed", ctx.invocation_id, exc_info=error)
         await context.abort(grpc.StatusCode.INTERNAL, _describe(error))
 

@@ -12,9 +12,10 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import grpc
+import pytest
 from vdagent_proto import agent_pb2, agent_pb2_grpc
 
-from ..contract import InvocationContext, Message, ToolCall
+from ..contract import ContractViolation, InvocationContext, Message, ToolCall
 from ..host import start_server
 
 Brain = Callable[[InvocationContext], Awaitable[None]]
@@ -297,3 +298,156 @@ async def test_backend_closing_the_stream_fails_a_pending_call():
         await call.done_writing()
         assert await read_all_or_status(call) == grpc.StatusCode.INTERNAL
     assert len(raised) == 1
+
+
+# ---------------------------------------------------------------- contract rules (R2–R5)
+
+RUN_Q = ToolCall("c1", "run_query", '{"sql": "SELECT 1"}')
+ASK = ToolCall("tc", "send_to_agent", '{"agent": "data", "message": "hi"}')
+
+
+async def assistant_while_unresolved(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q])
+    await ctx.emit_assistant("too early")
+
+
+async def empty_tool_call_id(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [ToolCall("", "run_query", "{}")])
+
+
+async def duplicate_tool_call_ids(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q, ToolCall("c1", "describe_table", "{}")])
+
+
+async def result_for_unknown_call(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q])
+    await ctx.emit_tool_result("zz", "?")
+
+
+async def result_before_any_step(ctx: InvocationContext) -> None:
+    await ctx.emit_tool_result("c1", "?")
+
+
+async def second_result_for_one_call(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q, ToolCall("c2", "run_query", "{}")])
+    await ctx.emit_tool_result("c1", "ds_1")
+    await ctx.emit_tool_result("c1", "ds_1 again")
+
+
+async def call_for_non_send_to_agent(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q])
+    await ctx.call_agent("c1", "data", "hi")
+
+
+async def call_for_unknown_id(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [ASK])
+    await ctx.call_agent("nope", "data", "hi")
+
+
+async def call_after_result(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [ASK, RUN_Q])
+    await ctx.emit_tool_result("tc", "answered without calling")
+    await ctx.call_agent("tc", "data", "hi")
+
+
+async def duplicate_call(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [ASK])
+    pending = asyncio.create_task(ctx.call_agent("tc", "data", "hi"))
+    await asyncio.sleep(0.05)
+    try:
+        await ctx.call_agent("tc", "data", "again")
+    finally:
+        pending.cancel()
+
+
+async def result_while_call_pending(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [ASK])
+    pending = asyncio.create_task(ctx.call_agent("tc", "data", "hi"))
+    await asyncio.sleep(0.05)
+    try:
+        await ctx.emit_tool_result("tc", "made up")
+    finally:
+        pending.cancel()
+
+
+async def return_with_unresolved_calls(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q])
+
+
+async def return_without_any_step(ctx: InvocationContext) -> None:
+    return None
+
+
+async def return_after_tool_results(ctx: InvocationContext) -> None:
+    await ctx.emit_assistant("", [RUN_Q])
+    await ctx.emit_tool_result("c1", "ds_1")
+
+
+async def caught_violation(ctx: InvocationContext) -> None:
+    try:
+        await ctx.emit_tool_result("zz", "?")
+    except ContractViolation:
+        pass
+    await ctx.emit_assistant("All good, honestly.")
+
+
+VIOLATIONS = [
+    (assistant_while_unresolved, "R2"),
+    (empty_tool_call_id, "R2"),
+    (duplicate_tool_call_ids, "R2"),
+    (result_for_unknown_call, "R3"),
+    (result_before_any_step, "R3"),
+    (second_result_for_one_call, "R3"),
+    (call_for_non_send_to_agent, "R4"),
+    (call_for_unknown_id, "R4"),
+    (call_after_result, "R4"),
+    (duplicate_call, "R4"),
+    (result_while_call_pending, "R4"),
+    (return_with_unresolved_calls, "R5"),
+    (return_without_any_step, "R5"),
+    (return_after_tool_results, "R5"),
+    (caught_violation, "R3"),
+]
+
+
+@pytest.mark.parametrize(("brain", "rule"), VIOLATIONS, ids=[b.__name__ for b, _ in VIOLATIONS])
+async def test_contract_violation_fails_the_turn(brain: Brain, rule: str):
+    raised: list[ContractViolation] = []
+
+    async def watched(ctx: InvocationContext) -> None:
+        try:
+            await brain(ctx)
+        except ContractViolation as exc:
+            raised.append(exc)
+            raise
+
+    async with agent_stub(FnAgent(watched)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        with pytest.raises(grpc.aio.AioRpcError) as err:
+            await read_all(call)
+
+    assert err.value.code() == grpc.StatusCode.INTERNAL
+    details = err.value.details() or ""
+    assert details.startswith("contract violation:")
+    assert f"({rule})" in details
+    if brain not in (return_with_unresolved_calls, return_without_any_step, return_after_tool_results, caught_violation):
+        assert len(raised) == 1, "the violation is raised at the offending call"
+
+
+async def test_violating_call_writes_no_frame():
+    frames_seen: list[str] = []
+
+    async def brain(ctx: InvocationContext) -> None:
+        await ctx.emit_assistant("", [RUN_Q])
+        await ctx.emit_tool_result("zz", "?")
+
+    async with agent_stub(FnAgent(brain)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        try:
+            while (frame := await asyncio.wait_for(call.read(), timeout=5)) is not grpc.aio.EOF:
+                frames_seen.append(kinds([frame])[0])
+        except grpc.aio.AioRpcError:
+            pass
+    assert frames_seen == ["message:assistant"]

@@ -1,13 +1,14 @@
 backend_db: ./var/backend.db
 warehouse_db: ./var/warehouse.db
-mcp_public_url: http://localhost:8000/mcp      # URL agents use to reach MCP
+mcp_public_url: http://localhost:8000/mcp       # URL agents use to reach MCP; must be reachable from agent machines
+agent_listen: 127.0.0.1:50050                   # hub address; 0.0.0.0:50050 to accept agents from other machines
 frontend_dist: ./frontend/dist                  # served at / if present
 max_depth: 4
 max_steps: 12
-health_interval_s: 10
+# Agents dial the hub and authenticate with VDAGENT_AGENT_TOKEN_<NAME> (repo-root .env).
 agents:
-  orchestrator: {address: localhost:50051, description: "Talks to the user, plans, delegates, writes final answers."}
-  data:         {address: localhost:50052, description: "Queries the warehouse; returns dataset ids."}
-  compare:      {address: localhost:50053, description: "Compares datasets, periods and segments."}
-  insight:      {address: localhost:50054, description: "Explains trends, anomalies and drivers."}
-  report:       {address: localhost:50055, description: "Builds formatted reports with charts."}
+  orchestrator: {description: "Talks to the user, plans, delegates, writes final answers."}
+  data:         {description: "Queries the warehouse; returns dataset ids."}
+  compare:      {description: "Compares datasets, periods and segments."}
+  insight:      {description: "Explains trends, anomalies and drivers."}
+  report:       {description: "Builds formatted reports with charts."}

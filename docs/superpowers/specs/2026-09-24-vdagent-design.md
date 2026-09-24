@@ -1,6 +1,8 @@
 # vdagent — Multi-Agent Analytics Assistant (PoC) — Design Spec
 
 Status: approved design, pre-implementation · Date: 2026-09-24
+Amended by `2026-09-24-agent-template-design.md` and `2026-09-24-agent-connect-direction-design.md`
+(agents dial the Backend's hub).
 
 ## 1. Purpose and scope
 
@@ -9,7 +11,7 @@ specialised LLM agents (Orchestrator, Data, Compare, Insight, Report) collaborat
 other through the Backend (BE). Every agent has one inspectable chat per user; the user can read it
 and post into it to guide the agent.
 
-In scope: Backend (FastAPI + MCP server + invocation engine), five agent services (gRPC), gRPC
+In scope: Backend (FastAPI + MCP server + invocation engine + agent hub), five agent processes, gRPC
 protocol, MCP tool catalog, Backend DB and demo Warehouse DB (both SQLite), Frontend (React SPA),
 local + docker-compose deployment, tests.
 
@@ -31,8 +33,8 @@ multi-process / horizontally scaled BE, dataset garbage collection, SSE replay.
 | D9 | Backend DB and Warehouse DB are both **SQLite**. |
 | D10 | No auth: users are picked in the UI and identified by `X-User-Id`. |
 | D11 | Compaction trigger: **task boundary** (lazily, when an agent next starts a turn). |
-| D12 | BE↔agent topology: agents are **gRPC servers**; the BE opens **one bidirectional stream per invocation**; agent→agent calls travel as frames on that stream; health via standard `grpc.health.v1`. |
-| D13 | Agent processes are **pure `grpc.aio`** (no FastAPI) — deviation from the original diagram, which showed FastAPI on each agent. |
+| D12 | BE↔agent topology: **agents dial the BE**. Each agent process opens one long-lived bidirectional gRPC stream (a *session*) to the BE's agent hub (`agent_listen`, default `127.0.0.1:50050`), authenticated by a per-agent token, and reconnects when it drops. The BE multiplexes that agent's turns and compactions on the session by `ref` (invocation id / compaction id); agent→agent calls travel as frames of the caller's turn. Healthy ⇔ an authenticated session is connected. The BE never opens connections to agents. |
+| D13 | Agent processes are **pure `grpc.aio` clients** (no FastAPI, no listening port) — deviation from the original diagram, which showed FastAPI on each agent. |
 | D14 | Python side uses a **uv workspace**; FE is **React + Vite + TypeScript** managed with npm. |
 
 ## 2. Architecture
@@ -44,10 +46,12 @@ flowchart LR
     API[REST / SSE API]
     ENG[Invocation engine<br/>queues · deadlock check · compaction]
     MCP[MCP server /mcp<br/>streamable HTTP]
+    HUB[Agent hub<br/>gRPC :50050]
   end
+  ENG --- HUB
   BE --- BDB[(backend.db<br/>SQLite)]
   MCP --- WDB[(warehouse.db<br/>SQLite, read-only)]
-  ENG -- "gRPC Invoke (bidi stream per invocation)<br/>Compact · grpc.health.v1" --> AG[5 agent processes<br/>grpc.aio + LiteLLM loop]
+  AG[5 agent processes, any machine<br/>grpc.aio + LiteLLM loop] -- "AgentHub.Connect (one bidi session per agent,<br/>turns + compactions multiplexed by ref)" --> HUB
   AG -- "JSON-RPC (MCP tools)" --> MCP
 ```
 
@@ -56,12 +60,14 @@ flowchart LR
 **Backend** — one FastAPI process. It MUST run as a single process (in-memory scheduler + SQLite).
 - *REST/SSE API* (§10) for the FE; also serves the built FE (`frontend/dist`) at `/`.
 - *Invocation engine* (§4) — owns every agent turn: per-stack locks and FIFO queues, wait-for
-  graph / deadlock rejection, task tracking, compaction, persistence, SSE publication, agent health.
+  graph / deadlock rejection, task tracking, compaction, persistence, SSE publication.
+- *Agent hub* (§4.3) — `grpc.aio` server on `agent_listen` (default `127.0.0.1:50050`) that agents
+  dial; authenticates sessions, tracks health (connected = healthy), multiplexes turns.
 - *MCP server* (§6) at `/mcp` — warehouse and artifact tools; per-agent tool filtering; identity
   from a per-invocation bearer token.
 
 **Agents** — one self-contained folder per agent (`agents/<name>/`), each built from the copyable
-template `agents/_template/` (see `2026-09-24-agent-template-design.md`) and run as its own process.
+template `agents/_template/` (see `2026-09-24-agent-template-design.md`) and run as its own process that dials the hub.
 An agent owns only its "brain": system prompt, model, summarisation. It holds no state between
 invocations and makes no routing or permission decisions.
 
@@ -75,7 +81,7 @@ invocations and makes no routing or permission decisions.
 | Python packaging | uv workspace (root `pyproject.toml`; members `proto`, `backend`, `agents/_template`, `agents/<name>` ×5) |
 | BE web | FastAPI, uvicorn, `sse-starlette` |
 | BE DB access | SQLAlchemy Core (async) + `aiosqlite`; schema applied from `backend/db/schema.sql` at startup (`CREATE TABLE IF NOT EXISTS`) |
-| gRPC | `grpcio`, `grpcio-tools` (codegen), `grpcio-health-checking`; `grpc.aio` on both sides |
+| gRPC | `grpcio`, `grpcio-tools` (codegen); `grpc.aio` on both sides (BE hub server, agent clients) |
 | MCP | official `mcp` Python SDK (server in BE, streamable-HTTP client in agents) |
 | LLM | LiteLLM (`litellm.acompletion`) against an OpenAI-compatible endpoint; one model shared by all agents |
 | FE | React 18, Vite, TypeScript, npm, `@tanstack/react-query`, `react-markdown` + `remark-gfm`, `vega-embed` (+ `vega`, `vega-lite`), plain CSS |
@@ -93,10 +99,10 @@ backend/
   pyproject.toml
   config.yaml
   vdagent_backend/
-    app.py                    # FastAPI app factory, lifespan (startup recovery, health loop)
+    app.py                    # FastAPI app factory, lifespan (startup recovery, agent hub)
     config.py
     api/                      # REST + SSE routers
-    engine/                   # scheduler, invocation runner, waitgraph, compaction, agent clients
+    engine/                   # scheduler, invocation runner, waitgraph, compaction, agent hub
     mcp/                      # MCP server, tools, auth middleware, permission matrix
     db/schema.sql
     db/repo.py                # queries
@@ -109,7 +115,7 @@ agents/
   <name>/                     # orchestrator, data, compare, insight, report
     README.md, pyproject.toml
     vdagent_<name>/
-      __main__.py, contract.py, host.py   # template copies: gRPC host (Agent service + health)
+      __main__.py, contract.py, host.py   # template copies: host (hub session, turn dispatch)
       agent.py                # LiteLLM tool loop + compaction
       llm.py                  # LLMClient protocol + LiteLLM implementation
       mcp_client.py, settings.py
@@ -179,22 +185,23 @@ sequenceDiagram
   participant M as MCP (/mcp)
   FE->>BE: POST /api/agents/orchestrator/messages
   BE->>BE: create task + invocation(queued) → acquire stack → compact → append "[from: user] …"
-  BE->>O: Invoke: InvokeStart(summary, history, peers, mcp_token)
-  O-->>BE: Message(assistant, tool_calls=[send_to_agent(data, …)])
-  O-->>BE: AgentCallRequest(tool_call_id, target=data, message)
+  Note over O,D: each agent keeps one hub session open (AgentHub.Connect); frames carry ref = invocation id
+  BE->>O: [inv_o] frame{start: InvokeStart(summary, history, peers, mcp_token)}
+  O-->>BE: [inv_o] Message(assistant, tool_calls=[send_to_agent(data, …)])
+  O-->>BE: [inv_o] AgentCallRequest(tool_call_id, target=data, message)
   BE->>BE: wait-for check → child invocation(queued) → acquire data stack
-  BE->>D: Invoke: InvokeStart(…)
+  BE->>D: [inv_d] frame{start: InvokeStart(…)}
   D->>M: run_query(sql)  [Authorization: Bearer mcp_token]
-  D-->>BE: Message(…) … Final("dataset ds_42: …")
-  BE->>O: AgentCallResult(tool_call_id, ok=true, content)
-  O-->>BE: Message(tool) … Final(answer)
+  D-->>BE: [inv_d] Message(…) … Final("dataset ds_42: …")
+  BE->>O: [inv_o] AgentCallResult(tool_call_id, ok=true, content)
+  O-->>BE: [inv_o] Message(tool) … Final(answer)
   BE-->>FE: SSE events throughout
 ```
 
 1. **Trigger.**
    - Human: `POST /api/agents/{agent}/messages` → create `task(status=running, root_agent)` and
      root `invocation(caller=user, depth=0, status=queued)`; respond `202`.
-   - Agent: an `AgentCallRequest` frame on a running invocation's stream → validate (§5.3) → run
+   - Agent: an `AgentCallRequest` frame of a running invocation's turn → validate (§5.3) → run
      the call checks (§4.4) → create child `invocation(parent_id, caller=<agent>, tool_call_id,
      depth=parent.depth+1, task_id=parent.task_id, status=queued)` or a `rejected` row.
 2. **Schedule.** Invocation is pushed onto the in-memory FIFO of stack `(user, agent)`. When the
@@ -203,15 +210,16 @@ sequenceDiagram
    1. Compaction (§4.5).
    2. Append the inbound message (`role=user`, `sender=caller`, `content=inbound_text`).
    3. Issue `mcp_token` (random 32-byte urlsafe) → map `token → (user_id, agent, invocation_id)`.
-   4. Open `Agent.Invoke` stream; send `InvokeStart` (§5).
+   4. Start the turn on the agent's hub session: send `frame{start: InvokeStart}` with
+      `ref = invocation id` (§5). No session → the invocation fails `UNAVAILABLE: <agent> is not connected`.
 4. **Run.** Consume `AgentFrame`s:
    - `message` → assign `seq`, persist, publish `message.appended`.
    - `call` → handled concurrently (one asyncio task per call); the eventual `AgentCallResult`
-     is written back on the same stream. The caller-side wait-for edge exists from acceptance
+     is sent back as a frame of the same turn. The caller-side wait-for edge exists from acceptance
      until the result is sent.
    - `final` → go to 5.
-5. **Finish.** Mark `completed`, store `result_text = final.content`, revoke `mcp_token`, close
-   stream. If `parent_id` → deliver `AgentCallResult{ok=true, content=result_text}` to the parent.
+5. **Finish.** Mark `completed`, store `result_text = final.content`, revoke `mcp_token`; the turn
+   (`ref`) is over and later uplink for it is dropped. If `parent_id` → deliver `AgentCallResult{ok=true, content=result_text}` to the parent.
    If root → mark task `completed`. Release the stack lock → start the next queued invocation.
 
 Every status change publishes `invocation.updated` / `task.updated`; queue/busy changes publish
@@ -224,15 +232,25 @@ Every status change publishes `invocation.updated` / `task.updated`; queue/busy 
 - Parallel `send_to_agent` calls from one assistant step run concurrently; different targets run in
   parallel, same target serialises through its queue.
 
-### 4.3 Agent clients and health
+### 4.3 Agent sessions and health
 
-- One `grpc.aio` channel per agent from `config.yaml` addresses.
-- Health loop every `health_interval_s` (10s): `grpc.health.v1.Health/Check(service="")`;
-  healthy iff `SERVING`. Health changes publish `agent.status` to every connected user.
+- The BE runs the agent hub (`engine/hub.py`), a `grpc.aio` server on `agent_listen`. Each agent
+  dials it and opens `AgentHub.Connect`; the first uplink is `hello(agent, token, runtime)`. The hub
+  accepts only names listed in `config.yaml` whose token matches `VDAGENT_AGENT_TOKEN_<NAME>`
+  (`hmac.compare_digest`), answers `welcome`, and otherwise ends the RPC `UNAUTHENTICATED`. An agent
+  without a configured token is logged at startup and can never connect.
+- **Healthy ⇔ an authenticated session is connected.** There is no polling; dead peers are detected
+  by gRPC keepalive (ping every 20 s, 10 s timeout). Health changes publish `agent.status` to every
+  connected user.
+- A new session for a connected name **replaces** the old one (old RPC ends `ABORTED: replaced by a
+  new connection`, its in-flight turns fail), without an intermediate unhealthy event.
+- **Losing a session** fails its in-flight turns with `UNAVAILABLE: agent disconnected` (normal
+  failure path, §4.6) and its pending compactions (non-fatal).
 - Human post to an unhealthy agent → `503 agent_unavailable`.
 - Agent call to an unhealthy agent → immediate `AgentCallResult{ok=false, content="error: <agent> is unavailable"}`
   (invocation row `rejected`, `error` set).
-- Opening `Invoke` failing at runtime → invocation `failed` (§4.6).
+- A queued turn that starts while its agent is not connected → invocation `failed`
+  (`UNAVAILABLE: <agent> is not connected`, §4.6).
 
 ### 4.4 Call checks (queue vs. reject)
 
@@ -261,9 +279,10 @@ edges, an acyclic wait-for graph (I3) guarantees no deadlock.
 
 At invocation start (holding the stack lock), select messages on the stack with `compacted = 0`
 whose task is finished (`completed|failed|cancelled`) and is not the current task. If none: skip.
-Else call `Agent.Compact(previous_summary, messages)` on that agent; on success, in one DB
-transaction upsert `stack_summaries.summary` and set `compacted = 1` on those rows. On failure: log,
-continue without compacting (non-fatal).
+Else send `compact(previous_summary, messages)` on that agent's hub session (`ref = cmp_<12 hex>`) and
+wait for its `compacted` reply (150 s timeout); on success, in one DB
+transaction upsert `stack_summaries.summary` and set `compacted = 1` on those rows. On failure
+(`failure` reply, timeout, lost session): log, continue without compacting (non-fatal).
 
 The LLM context for an invocation is: system prompt + latest summary + uncompacted messages in `seq`
 order. Compacting whole finished tasks never splits a tool-call/tool-result pair (pairs belong to
@@ -272,9 +291,10 @@ remain in the DB for the UI.
 
 ### 4.6 Failure, cancel, restart
 
-**Invocation failure causes:** stream error / non-OK gRPC status from the agent (e.g.
-`DEADLINE_EXCEEDED` for LLM timeout, `INTERNAL`), agent unreachable at open, protocol violation
-(§5.3).
+**Invocation failure causes:** a `failure` from the agent (reason `<CODE>: <detail>`, e.g.
+`DEADLINE_EXCEEDED: …` for LLM timeout, `INTERNAL: …`), the agent's session lost mid-turn
+(`UNAVAILABLE: agent disconnected`), the agent not connected when the turn starts
+(`UNAVAILABLE: <agent> is not connected`), protocol violation (§5.3).
 
 **Failure handling** (holding the stack lock):
 1. For every assistant `tool_call` of this invocation without a `role=tool` result, append a
@@ -282,12 +302,13 @@ remain in the DB for the UI.
 2. Append synthetic assistant message `[turn failed: <reason>]`.
 3. Mark invocation `failed` with `error`; revoke `mcp_token`; remove this invocation's outgoing
    wait-for edges. Outstanding child calls continue to completion, but their results are
-   discarded (the parent stream is gone).
+   discarded (the parent turn is over).
 4. Parent → `AgentCallResult{ok=false, content="error: <agent> failed: <reason>"}`; root → task `failed`.
 5. Release lock.
 
 **Cancel** (`POST /api/tasks/{id}/cancel`): remove the task's queued invocations from their queues;
-cancel running streams (`call.cancel()`); for each affected running invocation apply failure steps
+send `cancel(ref)` for running turns (the agent cancels the brain; an in-flight compaction is
+abandoned and its late reply dropped); for each affected running invocation apply failure steps
 1–2 with reason `cancelled`, revoke its `mcp_token`, remove its wait-for edges, and release its
 stack lock; mark all the task's non-terminal invocations and the task `cancelled`.
 No `AgentCallResult`s are delivered within a cancelled task.
@@ -316,12 +337,43 @@ with stack patching (steps 1–2); every `running` task → `failed`.
 syntax = "proto3";
 package vdagent.v1;
 
-service Agent {
-  // BE opens one stream per invocation. The first BackendFrame MUST be `start`.
-  rpc Invoke(stream BackendFrame) returns (stream AgentFrame);
-  rpc Compact(CompactRequest) returns (CompactResponse);
+service AgentHub {
+  // Opened by the agent. The first uplink message MUST be `hello`; the hub answers `welcome`
+  // or ends the RPC with UNAUTHENTICATED (unknown agent or bad token).
+  rpc Connect(stream AgentUplink) returns (stream HubDownlink);
 }
-// Health: standard grpc.health.v1.Health registered on the same server.
+
+message Hello {
+  string agent = 1;      // name as listed in the Backend's config.yaml
+  string token = 2;      // VDAGENT_AGENT_TOKEN_<NAME>
+  string runtime = 3;    // free-form, logged (e.g. "vdagent-template/2")
+}
+message Welcome {}
+message Cancel {}
+message Failure {
+  string code = 1;       // gRPC status name: DEADLINE_EXCEEDED | INTERNAL | INVALID_ARGUMENT
+  string detail = 2;
+}
+
+message AgentUplink {
+  string ref = 1;        // invocation id or compaction request id; empty for hello
+  oneof kind {
+    Hello hello = 2;
+    AgentFrame frame = 3;            // turn: message | call | final
+    Failure failure = 4;             // turn or compaction failed
+    CompactResponse compacted = 5;
+  }
+}
+
+message HubDownlink {
+  string ref = 1;        // empty for welcome
+  oneof kind {
+    Welcome welcome = 2;
+    BackendFrame frame = 3;          // turn: start | call_result
+    Cancel cancel = 4;
+    CompactRequest compact = 5;
+  }
+}
 
 enum Role { ROLE_UNSPECIFIED = 0; USER = 1; ASSISTANT = 2; TOOL = 3; }
 
@@ -368,7 +420,13 @@ message CompactResponse { string summary = 1; }
 History messages sent in `InvokeStart` and `CompactRequest` have `role=USER` content already
 rendered as `[from: <sender>] <text>`.
 
-### 5.2 Frame sequence (per invocation)
+Session rules: the first uplink is `hello`; anything else, an unknown name or a wrong token ends the
+RPC `UNAUTHENTICATED` (detail names the reason, never the token). A replaced session ends `ABORTED`;
+BE shutdown ends sessions `UNAVAILABLE`. Keepalive on both sides: ping every 20 s, 10 s timeout,
+pings allowed without active calls; the hub permits client pings every 10 s. Compaction:
+`compact` with `ref = cmp_<12 hex>`, answered by exactly one `compacted` or `failure` with that `ref`.
+
+### 5.2 Frame sequence (per invocation, all frames carry `ref = invocation id`)
 
 ```
 BE → start
@@ -377,21 +435,25 @@ loop:
   for each tool call (concurrently):
      MCP tool      → AG executes via MCP → AG → message(tool)
      send_to_agent → AG → call ; BE → call_result ; AG → message(tool)
-AG → final
+AG → final            (or AG → failure; or BE → cancel; or session lost)
 ```
+
+A turn ends at the first of `final`, `failure`, BE `cancel`, or session loss; the BE drops (and
+logs) any later uplink for that `ref`.
 
 ### 5.3 Validation (BE; any violation → invocation failed, reason `protocol error: …`)
 
-- First `BackendFrame` is `start`; exactly one.
+- A turn starts with exactly one `start` from the BE.
 - `call.tool_call_id` refers to a `send_to_agent` tool call in the latest assistant `message` of
   this invocation that has no result yet; at most one `call` per such tool call.
 - `message(tool).tool_call_id` refers to an unresolved tool call of the latest assistant message.
-- `final` only when no tool call is unresolved; nothing after `final`.
+- `final` only when no tool call is unresolved; anything after `final` is dropped.
 
 ### 5.4 Error signalling
 
-Agent aborts the stream with gRPC status `DEADLINE_EXCEEDED` (LLM timeout) or `INTERNAL`
-(anything else), with detail text. MCP tool errors are **not** invocation errors: they are returned
+The agent ends a failed turn with `failure{code, detail}`: `DEADLINE_EXCEEDED` (LLM timeout),
+`INTERNAL` (anything else, including host-detected contract violations), `INVALID_ARGUMENT`
+(malformed `start`). The invocation's failure reason is `<code>: <detail>`. MCP tool errors are **not** invocation errors: they are returned
 to the model as `role=tool` content `error: …`.
 
 ### 5.5 Future: group chat
@@ -452,20 +514,23 @@ values parse as ISO dates), `y` quantitative, multiple `y` via `fold`; pie → `
 ### 7.1 Process
 
 `python -m vdagent_<name>` (template entrypoint; see the agent-template spec §3–§4 for the
-transport contract every agent implements). The host reads `GRPC_PORT` (default 50051); the
-LiteLLM agents read, from the repo-root `.env` via `python-dotenv` (process env wins),
+transport contract every agent implements). Environment precedence: `agents/<name>/.env` >
+process env > repo-root `.env`. The host reads `VDAGENT_BACKEND` (hub address, default
+`localhost:50050`) and `VDAGENT_AGENT_TOKEN_<NAME>` (required; missing → exit 2 naming it; refused
+by the hub → exit 2), then dials the hub and reconnects with backoff (0.5 s doubling to 10 s,
+±20 % jitter, reset after a 30 s session). The LiteLLM agents read
 `OPENAI_API_KEY` (required), `OPENAI_BASE_URL` (required), `LLM_MODEL` (required; model name
 served by that endpoint, must support tool calling; one model shared by all five agents),
 `LLM_TIMEOUT_S` (default 120). Missing required env → exit 2 at startup with a message naming the
 variable. LiteLLM is called as `acompletion(model=f"openai/{LLM_MODEL}", api_base=OPENAI_BASE_URL,
 api_key=OPENAI_API_KEY, …)` — values passed explicitly, not via LiteLLM env conventions.
-Registers the `Agent` service and `grpc.health.v1` (set `SERVING` after startup). System prompt:
+No listening port. System prompt:
 `vdagent_<name>/prompts/system.md`; summariser prompt: `prompts/compact.md`.
 
 §7.2 and §7.3 describe the brain of the five LiteLLM agents (`agent.py`); the host translates its
 `ctx.emit_*` / `ctx.call_agent` calls into the frames below.
 
-### 7.2 `Invoke` loop
+### 7.2 Turn loop
 
 1. Read `start`. Open an MCP client session (`streamable HTTP`, header
    `Authorization: Bearer <mcp_token>`) and `list_tools`.
@@ -488,12 +553,12 @@ Registers the `Agent` service and `grpc.health.v1` (set `SERVING` after startup)
    → emit `call`, await matching `call_result`, content = result content. Emit each
    `message(tool)` as it completes. Invalid tool-call JSON or unknown tool name → tool result
    `error: …` (the model can retry).
-5. LLM timeout → abort `DEADLINE_EXCEEDED`; other exceptions → abort `INTERNAL`.
+5. LLM timeout → `failure` `DEADLINE_EXCEEDED`; other exceptions → `failure` `INTERNAL`.
 
 The LLM is called through an `LLMClient` protocol (`async complete(messages, tools, tool_choice) → assistant message`);
 the default implementation wraps `litellm.acompletion`. Tests inject a scripted fake.
 
-### 7.3 `Compact`
+### 7.3 Compaction
 
 One LLM call: `system = prompts/compact.md`, user content = previous summary + rendered messages.
 The prompt instructs: keep user preferences and guidance, questions asked and answers given,
@@ -761,19 +826,21 @@ included). Demo/compose: BE serves `frontend/dist` at `/` (same origin, no CORS)
 ```yaml
 backend_db: ./var/backend.db
 warehouse_db: ./var/warehouse.db
-mcp_public_url: http://localhost:8000/mcp      # URL agents use to reach MCP
+mcp_public_url: http://localhost:8000/mcp       # URL agents use to reach MCP; must be reachable from agent machines
+agent_listen: 127.0.0.1:50050                   # hub address; 0.0.0.0:50050 to accept agents from other machines
 frontend_dist: ./frontend/dist                  # served at / if present
 max_depth: 4
 max_steps: 12
-health_interval_s: 10
 agents:
-  orchestrator: {address: localhost:50051, description: "Talks to the user, plans, delegates, writes final answers."}
-  data:         {address: localhost:50052, description: "Queries the warehouse; returns dataset ids."}
-  compare:      {address: localhost:50053, description: "Compares datasets, periods and segments."}
-  insight:      {address: localhost:50054, description: "Explains trends, anomalies and drivers."}
-  report:       {address: localhost:50055, description: "Builds formatted reports with charts."}
+  orchestrator: {description: "Talks to the user, plans, delegates, writes final answers."}
+  data:         {description: "Queries the warehouse; returns dataset ids."}
+  compare:      {description: "Compares datasets, periods and segments."}
+  insight:      {description: "Explains trends, anomalies and drivers."}
+  report:       {description: "Builds formatted reports with charts."}
 ```
-The MCP permission matrix (§6.1) lives in code next to the tool definitions.
+The BE loads the repo-root `.env` first (process env wins) and reads each agent's token from
+`VDAGENT_AGENT_TOKEN_<NAME>`. The `agents:` map is the allowlist, the peer roster and the MCP
+permission key. The MCP permission matrix (§6.1) lives in code next to the tool definitions.
 
 Local run:
 ```
@@ -781,30 +848,43 @@ uv sync
 uv run python proto/scripts/gen.py
 uv run python data/seed_warehouse.py && uv run python data/seed_users.py
 uv run uvicorn vdagent_backend.app:app --port 8000
-GRPC_PORT=50052 uv run python -m vdagent_data     # ×5 (or: make agents); LLM settings from .env
+uv run python -m vdagent_data                     # ×5 (or: make agents); tokens + LLM settings from .env
 cd frontend && npm install && npm run dev
 ```
 
-Or with the root `Makefile`: `make reset-db`, `make backend`, `make agents` (or `make agent-<name>`).
+Or with the root `Makefile`: `make reset-db`, `make backend`, `make agents` (or `make agent-<name>`),
+in any order between backend and agents (agents retry). A remote agent: BE with
+`VDAGENT_AGENT_LISTEN=0.0.0.0:50050`, `VDAGENT_MCP_PUBLIC_URL=http://<be-host>:8000/mcp`,
+`make backend HOST=0.0.0.0`; on the agent machine `agents/<name>/.env` with `VDAGENT_BACKEND`, the
+token and LLM settings, then `make agent-<name>`. The hub has no TLS; tokens are the only gate.
 
 `docker-compose.yml`: `seed` (one-shot), `backend` (:8000, depends on seed; builds and serves the
-FE via a multi-stage build), five agent services from one Python image, each running
-`python -m vdagent_<name>` (each `GRPC_PORT=50051`, addressed by service name via a
-compose-specific config override); shared `./var` volume; `env_file: .env` on the agent services
-(`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`).
+FE via a multi-stage build; hub on `0.0.0.0:50050`, exposed to the compose network only, via
+`config.compose.yaml`), five agent services from one Python image, each running
+`python -m vdagent_<name>` with `VDAGENT_BACKEND=backend:50050`; shared `./var` volume;
+`env_file: .env` on the backend and agent services (tokens, `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+`LLM_MODEL`). `.dockerignore` excludes every `.env`.
 
 ## 13. Testing
 
 No real LLM in automated tests.
 
-**Backend engine** (fake in-process `Agent` gRPC server replaying scripted frames):
+**Agent hub** (`tests/test_hub.py`, real `grpc.aio` hub with test-side sessions): unknown name,
+wrong token, missing BE token or non-`hello` first message → `UNAUTHENTICATED`; connect/disconnect
+→ health and `on_change`; turns routed by `ref` with interleaved frames; session loss and
+replacement fail open turns; `cancel` sends `Cancel` and drops later uplink; `failure` →
+`AgentError`; compaction round trip, failure and timeout; unknown `ref` dropped.
+
+**Backend engine** (fake agents that dial the in-process hub and replay scripted frames):
 - FIFO per stack; human message queued behind a running agent call.
 - Parallel calls to different targets run concurrently.
 - Rejections: self call, depth limit, unknown/unhealthy target, ancestor cycle, cross-task
   wait-for cycle (§4.4 example).
 - Protocol violations → invocation failed; stack patched (I2).
-- Failure of a child → parent receives `ok=false`.
-- Cancel: queued removed, running cancelled, stacks patched, statuses `cancelled`.
+- Failure of a child → parent receives `ok=false`; session loss mid-turn patches the stack and
+  fails the parent's call; a queued turn whose agent disconnected fails `UNAVAILABLE`.
+- Cancel: queued removed, running cancelled (the agent receives `cancel`), stacks patched,
+  statuses `cancelled`.
 - Startup recovery marks in-flight work failed and patches stacks.
 - Compaction selects only finished, other-task, uncompacted messages; Compact failure is non-fatal.
 
@@ -812,16 +892,16 @@ No real LLM in automated tests.
 per-agent `tools/list` filter and `tools/call` rejection; other-user dataset → not found;
 `query_datasets` joining two datasets; invalid/revoked token → 401.
 
-**Agents** (see the agent-template spec §10): every agent folder's `tests/test_host.py` drives its
-host copy over in-process gRPC (frame order, call routing, rules R2–R5, error mapping, Compact,
-health, startup errors). Each LiteLLM agent's `tests/test_agent.py` (scripted `LLMClient`, fake
+**Agents** (see the agent-template spec §10): every agent folder's `tests/test_host.py` connects its
+host copy to a fake in-process hub (frame order, call routing, rules R2–R5, error mapping,
+compaction, hello/token, reconnect, cancel, startup errors, `.env` precedence). Each LiteLLM agent's `tests/test_agent.py` (scripted `LLMClient`, fake
 MCP): terminates at `max_steps` with `tool_choice="none"` on the last step; concurrent
 `send_to_agent` calls each produce a `call` and consume the matching `call_result`; MCP results
 emitted as `message(tool)`; MCP error becomes tool content; `Compact` returns the summary.
 
 **Frontend**: `tsc --noEmit`, `vite build`, Vitest for `applyEvent` only.
 
-**E2E smoke** (manual, needs `.env` with `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`): in the browser pick Alice, ask the Orchestrator
+**E2E smoke** (manual, needs `.env` with the agent tokens, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`): in the browser pick Alice, ask the Orchestrator
 "Compare revenue by region in 2025 vs 2024 and write a report"; expect a task tree
 Orchestrator → Data → Compare → Insight → Report, a saved report with at least one chart, and all
 five chats showing their part of the exchange.

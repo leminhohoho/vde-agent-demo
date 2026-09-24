@@ -1,4 +1,4 @@
-"""Entrypoint: `python -m <package>` serves this agent over gRPC.
+"""Entrypoint: `python -m <package>` connects this agent to the Backend's hub and serves its turns.
 
 COPIED FROM `agents/_template/` — do not edit in an agent folder.
 """

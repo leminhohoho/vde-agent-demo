@@ -1,4 +1,4 @@
-"""Invocation engine (§4, §13 "Backend engine") against fake in-process gRPC agents."""
+"""Invocation engine (§4, §13 "Backend engine") against fake agents connected to the in-process hub."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import asyncio
 import json
 import sqlite3
 
-import grpc
 import pytest
 
 from conftest import ALICE, Harness, Session, wait_for
@@ -178,8 +177,7 @@ async def test_call_rejections(harness: Harness, target: str, error: str) -> Non
 
 
 async def test_call_to_unhealthy_agent_is_rejected(harness: Harness) -> None:
-    await harness.agents["compare"].set_healthy(False)
-    await harness.clients.check_all()
+    await harness.agents["compare"].disconnect()
     res, row = await _rejection(harness, "compare")
     assert (res.ok, res.content, row["status"]) == (False, "error: compare is unavailable", "rejected")
     assert harness.agents["compare"].starts == []
@@ -273,7 +271,7 @@ async def test_child_abort_gives_parent_error_result(harness: Harness) -> None:
         await s.final("handled")
 
     async def data(s: Session) -> None:
-        await s.context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "LLM timed out")
+        await s.fail("DEADLINE_EXCEEDED", "LLM timed out")
 
     harness.on("orchestrator", orchestrator)
     harness.on("data", data)
@@ -294,6 +292,55 @@ async def test_root_failure_fails_task(harness: Harness) -> None:
     await harness.wait_task(task_id, "failed")
     (row,) = await harness.invocations(task_id)
     assert row["status"] == "failed" and row["error"] == "protocol error: call for unknown tool call 'nope'"
+
+
+async def test_session_loss_mid_turn_patches_the_stack_and_fails_the_parents_call(harness: Harness) -> None:
+    parent_results: list[pb.AgentCallResult] = []
+    data_waiting = asyncio.Event()
+
+    async def orchestrator(s: Session) -> None:
+        parent_results.append(await s.ask("data", "work"))
+        await s.final("handled")
+
+    async def data(s: Session) -> None:
+        await s.assistant(calls=[("q1", "run_query", {"sql": "SELECT 1"})])
+        data_waiting.set()
+        await asyncio.Event().wait()
+
+    harness.on("orchestrator", orchestrator)
+    harness.on("data", data)
+    task_id = await harness.post("orchestrator", "go")
+    await asyncio.wait_for(data_waiting.wait(), 5)
+    await harness.agents["data"].disconnect()
+    await harness.wait_task(task_id, "completed")
+
+    reason = "UNAVAILABLE: agent disconnected"
+    row = next(i for i in await harness.invocations(task_id) if i["agent"] == "data")
+    assert (row["status"], row["error"]) == ("failed", reason)
+    stack = await harness.stack("data")
+    _assert_i2(stack)
+    assert _roles(stack)[-2:] == [("tool", f"error: turn aborted ({reason})"), ("assistant", f"[turn failed: {reason}]")]
+    assert [(r.ok, r.content) for r in parent_results] == [(False, f"error: data failed: {reason}")]
+
+
+async def test_queued_turn_fails_when_its_agent_disconnected_before_it_started(harness: Harness) -> None:
+    data_busy = asyncio.Event()
+
+    async def data(s: Session) -> None:
+        data_busy.set()
+        await asyncio.Event().wait()
+
+    harness.on("data", data)
+    first = await harness.post("data", "first")
+    await asyncio.wait_for(data_busy.wait(), 5)
+    second = await harness.post("data", "second")  # queued behind the first
+    await harness.agents["data"].disconnect()
+
+    await harness.wait_task(first, "failed")
+    await harness.wait_task(second, "failed")
+    (row,) = await harness.invocations(second)
+    assert row["error"] == "UNAVAILABLE: data is not connected"
+    assert not harness.engine.agent_status(ALICE, "data")["healthy"]
 
 
 # --------------------------------------------------------------------------- cancel
@@ -346,6 +393,36 @@ async def test_cancel_removes_queued_cancels_running_and_patches_stacks(harness:
     await harness.wait_task(t2, "completed")
     with pytest.raises(TaskFinishedError):
         await harness.engine.cancel_task(ALICE, task_id)
+
+
+async def test_cancel_during_a_turn_sends_cancel_to_the_agent(harness: Harness) -> None:
+    observed: list[str] = []
+    started = asyncio.Event()
+
+    async def data(s: Session) -> None:
+        await s.assistant("thinking")
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            observed.append("cancelled")
+            raise
+
+    harness.on("data", data)
+    task_id = await harness.post("data", "long job")
+    await asyncio.wait_for(started.wait(), 5)
+    assert (await harness.engine.cancel_task(ALICE, task_id))["status"] == "cancelled"
+
+    (row,) = await harness.invocations(task_id)
+    assert row["status"] == "cancelled"
+    fake = harness.agents["data"]
+    await wait_for(lambda: _true(observed == ["cancelled"]))
+    assert fake.cancelled == [row["id"]]
+    assert _roles(await harness.stack("data"))[-1] == ("assistant", "[turn failed: cancelled]")
+
+
+async def _true(value: bool) -> bool:
+    return value
 
 
 # --------------------------------------------------------------------------- restart
@@ -467,7 +544,7 @@ async def test_engine_restart_recovers_via_start(harness: Harness) -> None:
     await wait_for(lambda: _started(harness, "data", 1))
     await harness.engine.stop()
 
-    engine2 = Engine(harness.cfg, harness.db, harness.bus, harness.tokens, harness.clients)
+    engine2 = Engine(harness.cfg, harness.db, harness.bus, harness.tokens, harness.hub)
     await engine2.recover()
     row = await repo.get_task(harness.db, task_id)
     assert row["status"] == "failed"

@@ -1,6 +1,5 @@
 """Invocation engine (§4)."""
 
-from vdagent_backend.engine.clients import AgentClients, ChannelFactory
 from vdagent_backend.engine.engine import (
     AgentUnavailableError,
     Engine,
@@ -8,11 +7,12 @@ from vdagent_backend.engine.engine import (
     TaskNotFoundError,
     UnknownAgentError,
 )
+from vdagent_backend.engine.hub import AgentError, AgentHub
 
 __all__ = [
-    "AgentClients",
+    "AgentError",
+    "AgentHub",
     "AgentUnavailableError",
-    "ChannelFactory",
     "Engine",
     "TaskFinishedError",
     "TaskNotFoundError",

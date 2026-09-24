@@ -1,13 +1,8 @@
 # Local development. See README.md ("Makefile usage").
 
 AGENTS := orchestrator data compare insight report
-# Must match the addresses in backend/config.yaml.
-PORT_orchestrator := 50051
-PORT_data         := 50052
-PORT_compare      := 50053
-PORT_insight      := 50054
-PORT_report       := 50055
 
+HOST         ?= 127.0.0.1
 BACKEND_DB   ?= var/backend.db
 WAREHOUSE_DB ?= var/warehouse.db
 
@@ -16,17 +11,18 @@ AGENT_TARGETS := $(addprefix agent-,$(AGENTS))
 .PHONY: help backend agents reset-db $(AGENT_TARGETS)
 
 help:
-	@echo "make backend        start the backend on :8000"
-	@echo "make agent-<name>   start one agent ($(AGENTS))"
-	@echo "make agents         start all agents in this terminal"
+	@echo "make backend        start the backend: HTTP on $(HOST):8000, agent hub per agent_listen (default 127.0.0.1:50050)"
+	@echo "                    HOST=0.0.0.0 serves HTTP (UI, MCP) to other machines"
+	@echo "make agent-<name>   start one agent ($(AGENTS)); it dials the hub at VDAGENT_BACKEND (default localhost:50050)"
+	@echo "make agents         start all agents in this terminal (before or after the backend: they retry)"
 	@echo "make reset-db       delete and reseed $(BACKEND_DB) and $(WAREHOUSE_DB) (stop the stack first)"
 
 backend:
-	uv run uvicorn vdagent_backend.app:app --port 8000
+	uv run uvicorn vdagent_backend.app:app --host $(HOST) --port 8000
 
 # Static pattern rule: works with .PHONY, unlike a plain `agent-%` rule.
 $(AGENT_TARGETS): agent-%:
-	GRPC_PORT=$(PORT_$*) uv run python -m vdagent_$*
+	uv run python -m vdagent_$*
 
 agents:
 	$(MAKE) -j $(words $(AGENTS)) $(AGENT_TARGETS)

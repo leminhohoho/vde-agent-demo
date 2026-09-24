@@ -4,7 +4,13 @@ Copy this folder to build a vdagent agent. The template owns the gRPC side of th
 Backend↔agent protocol; you write the **brain** with whatever you like — plain code, LiteLLM,
 LangChain/LangGraph, the OpenAI Agents SDK.
 
-Design: [`docs/superpowers/specs/2026-09-24-agent-template-design.md`](../../docs/superpowers/specs/2026-09-24-agent-template-design.md).
+An agent dials the Backend: it opens one long-lived session to the Backend's agent hub
+(`VDAGENT_BACKEND`, default `localhost:50050`), authenticates with `VDAGENT_AGENT_TOKEN_<NAME>`,
+and serves every turn and compaction the Backend sends over it. It needs no listening port, so it
+can run on any machine that reaches the Backend.
+
+Design: [`docs/superpowers/specs/2026-09-24-agent-template-design.md`](../../docs/superpowers/specs/2026-09-24-agent-template-design.md),
+amended by [`2026-09-24-agent-connect-direction-design.md`](../../docs/superpowers/specs/2026-09-24-agent-connect-direction-design.md).
 
 ## What an agent is
 
@@ -23,9 +29,9 @@ agents/<name>/
         └── test_agent.py       ← your tests
 ```
 
-The **host** speaks gRPC to the Backend, serves `grpc.health.v1`, routes agent-to-agent calls,
-checks the turn rules, and maps errors to gRPC statuses. It is identical in every agent; to change
-it, change `_template` and re-copy into every agent folder.
+The **host** keeps the hub session open (reconnecting with backoff), runs turns concurrently,
+routes agent-to-agent call replies, checks the turn rules, and reports failures. It is identical
+in every agent; to change it, change `_template` and re-copy into every agent folder.
 
 The **Backend** owns everything shared: the agent registry (`backend/config.yaml`), MCP tool
 permissions, routing and deadlock checks for agent calls, and every agent's message history. An
@@ -43,12 +49,29 @@ agent keeps no state between turns.
    `vdagent-<name> = { workspace = true }` to `[tool.uv.sources]`. Run `uv sync`.
 5. `Dockerfile.python`: add `COPY agents/<name>/pyproject.toml agents/<name>/pyproject.toml`
    next to the others.
-6. Register it with the Backend: an `agents:` entry (address + one-line description, which peers
-   see) in `backend/config.yaml` and `backend/config.compose.yaml`, a service in
-   `docker-compose.yml` (`command: ["python", "-m", "vdagent_<name>"]`), and `<name>` in `AGENTS`
-   plus a `PORT_<name>` line in the root `Makefile`.
-7. Grant MCP tools in `backend/vdagent_backend/mcp/tools.py` (`ALL_AGENTS` and `PERMISSIONS`).
-8. `uv run pytest agents/<name>`, then `make agent-<name>`.
+6. Register it with the Backend: an `agents:` entry (one-line description, which peers see) in
+   `backend/config.yaml` and `backend/config.compose.yaml`, a service in `docker-compose.yml`
+   (`<<: *agent`, `command: ["python", "-m", "vdagent_<name>"]`), and `<name>` in `AGENTS` in the
+   root `Makefile`.
+7. Add a token to the repo-root `.env`: `VDAGENT_AGENT_TOKEN_<NAME>=…` (generate with
+   `python -c "import secrets; print(secrets.token_urlsafe(24))"`). The Backend and the agent read
+   the same variable; restart the Backend to pick it up.
+8. Grant MCP tools in `backend/vdagent_backend/mcp/tools.py` (`ALL_AGENTS` and `PERMISSIONS`).
+9. `uv run pytest agents/<name>`, then `make agent-<name>`.
+
+## Configuration
+
+`.env` files, highest precedence first: `agents/<name>/.env`, the process environment, the
+repo-root `.env`. Put per-agent settings (e.g. a different `OPENAI_API_KEY`, or everything a remote
+machine needs) in `agents/<name>/.env`; it never enters Docker images.
+
+| Variable | |
+|---|---|
+| `VDAGENT_AGENT_TOKEN_<NAME>` | Required; missing → exit 2 naming the variable. A refused token or unknown name → exit 2. |
+| `VDAGENT_BACKEND` | Hub address `host:port`, default `localhost:50050`. |
+
+Losing the session (Backend restart, network) cancels the in-flight turns — your brain sees
+`asyncio.CancelledError` — and the host reconnects (0.5 s doubling to 10 s, ±20 % jitter).
 
 ## The contract
 
@@ -83,7 +106,7 @@ sequenceDiagram
   participant BE as Backend
   participant H as host.py
   participant A as your agent
-  BE->>H: Invoke(start)
+  BE->>H: frame{start} on the session
   H->>A: await invoke(ctx)
   A->>H: emit_assistant("", [send_to_agent#c1])
   A->>H: call_agent("c1", "data", "…")
@@ -104,10 +127,10 @@ sequenceDiagram
 | R3 | Every tool call gets exactly one `emit_tool_result` — including `send_to_agent`: `call_agent`, then emit its reply. | ✓ |
 | R4 | `call_agent` only for an unresolved `send_to_agent` call of the latest step, once per id; no result for that id while its call is pending. | ✓ |
 | R5 | When `invoke` returns, every call is resolved and the last step has no tool calls — its content is the final answer. Nothing may be emitted afterwards. | ✓ |
-| R6 | Tool failures become result content `error: …`; the turn continues. Model timeout → raise `AgentTimeoutError` (gRPC `DEADLINE_EXCEEDED`). Anything else raised fails the turn (`INTERNAL`). | mapping ✓ |
+| R6 | Tool failures become result content `error: …`; the turn continues. Model timeout → raise `AgentTimeoutError` (reported as `DEADLINE_EXCEEDED`). Anything else raised fails the turn (`INTERNAL`). | mapping ✓ |
 | R7 | At most `ctx.max_steps` LLM calls. | |
 | R8 | One agent object serves concurrent turns: keep per-turn state off `self`. | |
-| R9 | Never swallow `asyncio.CancelledError` (task cancel from the Backend). | |
+| R9 | Never swallow `asyncio.CancelledError` (task cancel from the Backend, or a lost session). | |
 
 A broken rule raises `ContractViolation` at the offending call and fails the turn with
 `INTERNAL: contract violation: …`, even if you catch it.
@@ -283,8 +306,8 @@ one (R5). Map the SDK's timeout exception to `AgentTimeoutError`.
 
 ## Testing
 
-`tests/test_host.py` drives the real host over in-process gRPC with a fake Backend; it exports
-helpers for your own tests:
+`tests/test_host.py` runs the real host against a fake in-process Backend hub over gRPC; it exports
+helpers for your own tests (a turn failure surfaces as `grpc.aio.AioRpcError` with its code):
 
 ```python
 from .test_host import agent_stub, kinds, read_all, read_frame, start_frame

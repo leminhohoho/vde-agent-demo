@@ -3,8 +3,9 @@
 `uvicorn vdagent_backend.app:app` resolves `app` lazily (PEP 562), so importing this module (e.g.
 from tests) has no side effects. The app MUST run as a single process.
 
-Lifespan: open backend.db (schema applied), startup recovery (§4.6), agent channels + health loop,
-MCP session manager. `/mcp` is routed ahead of everything else; the built FE (`frontend_dist`) is
+Lifespan: open backend.db (schema applied), startup recovery (§4.6), the agent hub on
+`agent_listen` (agents dial in; startup fails if it cannot bind), MCP session manager. `/mcp` is
+routed ahead of everything else; the built FE (`frontend_dist`) is
 served at `/` with an SPA fallback when the directory exists.
 """
 
@@ -24,15 +25,15 @@ from starlette.responses import Response
 from vdagent_backend.api import rest, sse
 from vdagent_backend.api.deps import Services
 from vdagent_backend.api.errors import error_response, install_error_handlers
-from vdagent_backend.config import Config, load_config
+from vdagent_backend.config import Config, load_config, tokens_from_env
 from vdagent_backend.db.database import create_db
-from vdagent_backend.engine import AgentClients, ChannelFactory, Engine
+from vdagent_backend.engine import AgentHub, Engine
 from vdagent_backend.events import EventBus
 from vdagent_backend.mcp.server import create_mcp
 from vdagent_backend.tokens import TokenRegistry
 
 
-def create_app(cfg: Config | None = None, *, channel_factory: ChannelFactory | None = None) -> FastAPI:
+def create_app(cfg: Config | None = None) -> FastAPI:
     cfg = cfg or load_config()
     tokens = TokenRegistry()
     bus = EventBus()
@@ -41,8 +42,8 @@ def create_app(cfg: Config | None = None, *, channel_factory: ChannelFactory | N
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        clients = AgentClients(cfg.agents, health_interval_s=cfg.health_interval_s, channel_factory=channel_factory)
-        engine = Engine(cfg, db, bus, tokens, clients)
+        hub = AgentHub(cfg.agents, tokens_from_env(cfg.agents))
+        engine = Engine(cfg, db, bus, tokens, hub)
         app.state.services = Services(cfg=cfg, db=db, bus=bus, engine=engine)
         await engine.start()
         try:

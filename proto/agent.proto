@@ -1,12 +1,44 @@
 syntax = "proto3";
 package vdagent.v1;
 
-service Agent {
-  // BE opens one stream per invocation. The first BackendFrame MUST be `start`.
-  rpc Invoke(stream BackendFrame) returns (stream AgentFrame);
-  rpc Compact(CompactRequest) returns (CompactResponse);
+service AgentHub {
+  // Opened by the agent. The first uplink message MUST be `hello`; the hub answers `welcome`
+  // or ends the RPC with UNAUTHENTICATED (unknown agent or bad token). The hub then multiplexes
+  // that agent's turns (ref = invocation id) and compactions (ref = cmp_<12 hex>) on the stream.
+  rpc Connect(stream AgentUplink) returns (stream HubDownlink);
 }
-// Health: standard grpc.health.v1.Health registered on the same server.
+
+message Hello {
+  string agent = 1;      // name as listed in the Backend's config.yaml
+  string token = 2;      // VDAGENT_AGENT_TOKEN_<NAME>
+  string runtime = 3;    // free-form, logged (e.g. "vdagent-template/2")
+}
+message Welcome {}
+message Cancel {}
+message Failure {
+  string code = 1;       // gRPC status name: DEADLINE_EXCEEDED | INTERNAL | INVALID_ARGUMENT
+  string detail = 2;
+}
+
+message AgentUplink {
+  string ref = 1;        // invocation id or compaction request id; empty for hello
+  oneof kind {
+    Hello hello = 2;
+    AgentFrame frame = 3;            // turn: message | call | final
+    Failure failure = 4;             // turn or compaction failed
+    CompactResponse compacted = 5;
+  }
+}
+
+message HubDownlink {
+  string ref = 1;        // empty for welcome
+  oneof kind {
+    Welcome welcome = 2;
+    BackendFrame frame = 3;          // turn: start | call_result
+    Cancel cancel = 4;
+    CompactRequest compact = 5;
+  }
+}
 
 enum Role { ROLE_UNSPECIFIED = 0; USER = 1; ASSISTANT = 2; TOOL = 3; }
 

@@ -12,7 +12,8 @@ from __future__ import annotations
 from .contract import Agent, InvocationContext, Message
 
 NAME = "echo"
-"""Used in logs and startup errors. The Backend identifies agents by address in `config.yaml`."""
+"""The name this agent connects to the Backend as: an `agents:` entry in `backend/config.yaml`.
+It also names the token variable, `VDAGENT_AGENT_TOKEN_<NAME>`, and appears in logs and startup errors."""
 
 SUMMARY_MAX_CHARS = 2000
 

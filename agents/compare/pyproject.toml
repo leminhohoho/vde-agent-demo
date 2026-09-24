@@ -6,7 +6,6 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "vdagent-proto",
   "grpcio>=1.66",
-  "grpcio-health-checking>=1.66",
   "python-dotenv>=1.0",
   "litellm>=1.50",
   "mcp>=1.9",

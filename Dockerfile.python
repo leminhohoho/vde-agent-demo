@@ -46,5 +46,5 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY --from=frontend /frontend/dist frontend/dist
 
-EXPOSE 8000 50051
+EXPOSE 8000 50050
 CMD ["uvicorn", "vdagent_backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

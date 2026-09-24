@@ -1,4 +1,4 @@
-"""LLM settings from the environment (the host has already loaded the repo-root `.env`)."""
+"""LLM settings from the environment (the host has already loaded `agents/<name>/.env` and the repo-root `.env`)."""
 
 from __future__ import annotations
 

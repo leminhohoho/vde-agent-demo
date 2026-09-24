@@ -1,15 +1,16 @@
-# docker-compose variant of config.yaml: agents are addressed by compose service name and reach MCP
-# through the `backend` service. Relative paths resolve from the container working dir (/app).
+# docker-compose variant of config.yaml: the hub listens on all interfaces so agent containers can dial
+# `backend:50050`, and agents reach MCP through the `backend` service. Relative paths resolve from the
+# container working dir (/app).
 backend_db: ./var/backend.db
 warehouse_db: ./var/warehouse.db
 mcp_public_url: http://backend:8000/mcp        # URL agents use to reach MCP
+agent_listen: 0.0.0.0:50050                     # hub address (exposed to the compose network only)
 frontend_dist: ./frontend/dist                  # served at / if present
 max_depth: 4
 max_steps: 12
-health_interval_s: 10
 agents:
-  orchestrator: {address: orchestrator:50051, description: "Talks to the user, plans, delegates, writes final answers."}
-  data:         {address: data:50051, description: "Queries the warehouse; returns dataset ids."}
-  compare:      {address: compare:50051, description: "Compares datasets, periods and segments."}
-  insight:      {address: insight:50051, description: "Explains trends, anomalies and drivers."}
-  report:       {address: report:50051, description: "Builds formatted reports with charts."}
+  orchestrator: {description: "Talks to the user, plans, delegates, writes final answers."}
+  data:         {description: "Queries the warehouse; returns dataset ids."}
+  compare:      {description: "Compares datasets, periods and segments."}
+  insight:      {description: "Explains trends, anomalies and drivers."}
+  report:       {description: "Builds formatted reports with charts."}

@@ -2,6 +2,8 @@
 
 Status: approved design, pre-implementation · Date: 2026-09-24
 Amends: `2026-09-24-vdagent-design.md` (§2.1 Agents, §2.3 layout, §7 Agent service, §12, §13).
+Amended by: `2026-09-24-agent-connect-direction-design.md` (the host dials the Backend's hub; T7, T9,
+§3, §4, §9, §10 below reflect it).
 
 ## 1. Purpose and scope
 
@@ -33,9 +35,9 @@ only, §6); agent shutdown hooks.
 | T4 | **Framework openness via README recipes** (LangGraph, OpenAI Agents SDK), not a runnable example. |
 | T5 | **Callback-context API**: the developer implements `invoke(ctx)` and `compact(...)`; `ctx` offers `emit_assistant`, `emit_tool_result`, `call_agent`. No protobuf in developer code. |
 | T6 | **Host guards the protocol locally**: frame-ordering rules the Backend enforces (main spec §5.3) are checked in-process and raise `ContractViolation` at the offending call site. |
-| T7 | Entrypoint `python -m <package>`; `__main__.py` calls `host.main(NAME, build_agent)`. `AGENT_NAME` env var is removed. |
+| T7 | Entrypoint `python -m <package>`; `__main__.py` calls `host.main(NAME, build_agent)`, which **connects out** to the Backend's agent hub (`VDAGENT_BACKEND`) as `NAME` with token `VDAGENT_AGENT_TOKEN_<NAME>` and serves turns over that session. `AGENT_NAME` env var is removed; agents listen on no port. |
 | T8 | Registry (`backend/config.yaml`) and MCP permissions (`backend/.../mcp/tools.py` `PERMISSIONS`) stay in the Backend. |
-| T9 | The template's only dependencies: `vdagent-proto`, `grpcio`, `grpcio-health-checking`, `python-dotenv`. No LLM, framework, or MCP client. |
+| T9 | The template's only dependencies: `vdagent-proto`, `grpcio`, `python-dotenv`. No LLM, framework, or MCP client. |
 | T10 | Agents may run **local tools** in-process; they must still be emitted (§6). |
 | T11 | Tests live **inside each agent package** (`vdagent_<name>/tests/`) so identically named test files in different agents get unique module names under pytest's default import mode. |
 | T12 | `invoke` returns `None`. The turn's final answer is the content of the **last emitted assistant step, which must have no tool calls**; the host sends `final` from it. (Streaming adapters forward every AI message and need no special final handling.) |
@@ -99,20 +101,20 @@ agents/orchestrator/
         └── test_agent.py          # LiteLLM loop tests (ported from agents/tests/test_agent_runtime.py)
 ```
 
-| Agent | Package | Local port | Prompt source |
+| Agent | Package | Token variable | Prompt source |
 |---|---|---|---|
-| orchestrator | `vdagent_orchestrator` | 50051 | `prompts/orchestrator.md` |
-| data | `vdagent_data` | 50052 | `prompts/data.md` |
-| compare | `vdagent_compare` | 50053 | `prompts/compare.md` |
-| insight | `vdagent_insight` | 50054 | `prompts/insight.md` |
-| report | `vdagent_report` | 50055 | `prompts/report.md` |
+| orchestrator | `vdagent_orchestrator` | `VDAGENT_AGENT_TOKEN_ORCHESTRATOR` | `prompts/orchestrator.md` |
+| data | `vdagent_data` | `VDAGENT_AGENT_TOKEN_DATA` | `prompts/data.md` |
+| compare | `vdagent_compare` | `VDAGENT_AGENT_TOKEN_COMPARE` | `prompts/compare.md` |
+| insight | `vdagent_insight` | `VDAGENT_AGENT_TOKEN_INSIGHT` | `prompts/insight.md` |
+| report | `vdagent_report` | `VDAGENT_AGENT_TOKEN_REPORT` | `prompts/report.md` |
 
 ### 2.3 Migration map (old → new, per LiteLLM agent)
 
 | Old | New |
 |---|---|
 | `server.py` `AgentService`, `_CallRouter`, `start_server`, `serve`, `main`, error mapping | `host.py` (generic, no LLM) |
-| `settings.py` `load_env_file`, `GRPC_PORT` | `host.py` |
+| `settings.py` `load_env_file`, server port | `host.py` (now `load_env_files`; the port is gone — the host dials the hub) |
 | `settings.py` LLM vars (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`, `LLM_TIMEOUT_S`) | `settings.py` (per agent) |
 | `settings.py` `AGENT_NAMES`, `AGENT_NAME` | removed; `agent.py` `NAME` |
 | `loop.py` `Invocation`, `send_to_agent_tool`, `build_system_prompt`, `compact`, `render_for_compaction` | `agent.py` `LiteLLMAgent`, operating on `ctx` and OpenAI-shaped dicts |
@@ -170,13 +172,15 @@ class Agent(Protocol):
     async def compact(self, previous_summary: str, messages: list[Message]) -> str: ...
 
 class AgentConfigError(Exception): ...    # raise from build_agent → process exits 2 with the message
-class AgentTimeoutError(Exception): ...   # raise from invoke/compact → gRPC DEADLINE_EXCEEDED
+class AgentTimeoutError(Exception): ...   # raise from invoke/compact → failure DEADLINE_EXCEEDED
 class ContractViolation(Exception): ...   # raised by the host; the turn fails with INTERNAL
 ```
 
 `call_agent` returns the peer's reply text. When the Backend rejects or the peer fails, it returns
-`error: …` text (never raises for that). It raises only if the Backend ends the stream while the
-call is pending; that exception must propagate.
+`error: …` text (never raises for that). It raises only if the session is lost or the turn is
+cancelled while the call is pending (the brain sees `asyncio.CancelledError`); that must propagate.
+The docstring in `contract.py` still says "if the Backend ends the stream", which now means exactly
+this.
 
 ### 3.1 Rules
 
@@ -190,41 +194,48 @@ call is pending; that exception must propagate.
 | R6 | Tool failures (MCP, local, bad arguments) become result content `error: …` and the turn continues. LLM timeout → raise `AgentTimeoutError`. Any other exception fails the turn. | mapping ✓ |
 | R7 | Make at most `ctx.max_steps` LLM calls. | — |
 | R8 | One agent object serves concurrent turns (different users/tasks): no per-turn state on `self`. | — |
-| R9 | Never swallow `asyncio.CancelledError` — task cancel from the Backend arrives as cancellation. | — |
+| R9 | Never swallow `asyncio.CancelledError` — task cancel from the Backend (a `cancel` frame) and a lost session arrive as cancellation. | — |
 
 ## 4. Host (`host.py`)
 
-Public surface: `main(name, build_agent)`, `start_server(agent, address) -> (server, health, port)`
-(used by tests), `load_env_file()`. Everything else is private.
+Public surface: `main(name, build_agent)`, `run_agent(name, agent, backend, token, stop)` (the
+session loop; used by tests), `load_env_files(agent_dir=None)`. Everything else is private.
 
 ### 4.1 `main(name, build_agent)`
 
 1. `logging.basicConfig(INFO, "%(asctime)s %(levelname)s %(name)s: %(message)s")`.
-2. Load the repo-root `.env` without overriding process env (nearest `.env` walking up from
-   `host.py`, else `find_dotenv(usecwd=True)` — today's logic).
-3. `GRPC_PORT` (default 50051); non-integer → stderr `"<name>: GRPC_PORT must be an integer; got …"`, exit 2.
+2. `load_env_files()`: `agents/<name>/.env` (the folder holding `pyproject.toml`) with
+   `override=True`, then the nearest `.env` above that folder (else `find_dotenv(usecwd=True)`) with
+   `override=False`. Precedence: agent `.env` > process env > root `.env`.
+3. `VDAGENT_BACKEND` (default `localhost:50050`); `VDAGENT_AGENT_TOKEN_<NAME>` required — missing →
+   stderr `"<name>: missing required environment variable VDAGENT_AGENT_TOKEN_<NAME>"`, exit 2.
 4. `agent = build_agent()`; `AgentConfigError` → stderr `"<name>: <message>"`, exit 2.
-5. `start_server(agent, f"[::]:{port}")`: `grpc.aio` server with the `Agent` servicer and
-   `grpc.health.v1`; health `SERVING` for `""` and `vdagent.v1.Agent`. Log
-   `"agent <name> serving on port <port>"`.
-6. On SIGINT/SIGTERM: health graceful shutdown, `server.stop(5.0)`.
+5. `run_agent(...)` until SIGINT/SIGTERM: open `AgentHub.Connect` (keepalive 20 s / 10 s, pings
+   without calls), send `hello(name, token, runtime)`, wait for `welcome`, log
+   `"agent <name> connected to <backend>"`, serve the session. `UNAUTHENTICATED` → stderr with the
+   detail, exit 2. Any other failure or loss → cancel the session's in-flight turns and
+   compactions, log, wait (0.5 s doubling to 10 s, ±20 % jitter, reset after a session lasted
+   30 s), reconnect.
+6. Shutdown: cancel in-flight work, cancel the stream, exit 0.
 
-### 4.2 `Invoke`
+### 4.2 Turns
 
-1. First frame must be `start`, else abort `INVALID_ARGUMENT`.
-2. Build a stream-backed `InvocationContext` from `InvokeStart` (proto → dataclasses/dicts;
-   assistant messages with tool calls get `content: None` when empty, matching today's
-   `AssistantMessage.to_openai`; unspecified roles are skipped with a warning; `max_steps <= 0` → 12).
-3. Start a reader task: `call_result` frames resolve the pending `call_agent` future by
-   `tool_call_id`; EOF or read error fails all pending futures with a stream-closed error; other
-   frames are logged and ignored (today's `_CallRouter`).
-4. `await agent.invoke(ctx)`. Frame writes are serialised by a lock.
-5. After return: enforce R5 (context closed; later emits raise `ContractViolation`), send
-   `final(content=<last assistant step content>)`.
-6. Errors: any `ContractViolation` recorded during the turn → abort `INTERNAL`,
+1. `frame{start}` with a new `ref` → build an `InvocationContext` from `InvokeStart` (proto →
+   dataclasses/dicts; assistant messages with tool calls get `content: None` when empty;
+   unspecified roles are skipped with a warning; `max_steps <= 0` → 12) and run
+   `agent.invoke(ctx)` as a task — turns run concurrently. A `start` without history → `failure`
+   `INVALID_ARGUMENT`.
+2. Writes become `AgentUplink{ref, frame}` on the session's send queue (one writer task).
+   `frame{call_result}` resolves the pending `call_agent` future by `tool_call_id`.
+3. After `invoke` returns: enforce R5 (context closed; later emits raise `ContractViolation`),
+   send `final(content=<last assistant step content>)`.
+4. Errors → `failure{code, detail}`: any `ContractViolation` recorded during the turn → `INTERNAL`,
    `"contract violation: <message>"` (even if the agent caught it); `AgentTimeoutError` anywhere in
    the exception (including exception groups) → `DEADLINE_EXCEEDED`; any other exception →
-   `INTERNAL` with `"<Type>: <message>"`. Always cancel the reader task.
+   `INTERNAL` with `"<Type>: <message>"`.
+5. `cancel` for a `ref` → cancel that turn's task (the brain sees `CancelledError`); nothing more is
+   sent for that `ref`. Downlink for an unknown `ref` (e.g. a `call_result` after cancel) is
+   dropped with a warning.
 
 ### 4.3 Ordering guard (T6)
 
@@ -234,10 +245,10 @@ Per turn: `latest: dict[id, name]`, `unresolved: set[id]`, `calling: set[id]`, `
 `ContractViolation` with a message naming the rule and the tool-call id, e.g.
 `"call_agent('c1'): tool call 'c1' is 'run_query', not send_to_agent (R4)"`.
 
-### 4.4 `Compact`
+### 4.4 Compaction
 
-Convert `CompactRequest.messages` to `Message` dicts, `await agent.compact(previous_summary,
-messages)`, return `CompactResponse(summary=…)`. Error mapping as §4.2 step 6.
+`compact` with a `ref` → convert `messages` to `Message` dicts, `await agent.compact(previous_summary,
+messages)` as a task, answer `compacted(summary)` or `failure` (mapping as §4.2 step 4).
 
 ## 5. Template stub (`agent_template/agent.py`)
 
@@ -257,8 +268,9 @@ def build_agent() -> Agent:
     return EchoAgent()
 ```
 
-Runnable with `uv run python -m agent_template`; pointing a `backend/config.yaml` entry at it makes a
-human message come back as `echo: [from: user] …`.
+Runnable with `uv run python -m agent_template` once `echo` is listed in `backend/config.yaml` and
+`VDAGENT_AGENT_TOKEN_ECHO` is set for both sides; a human message then comes back as
+`echo: [from: user] …`.
 
 ## 6. Tools
 
@@ -312,7 +324,7 @@ Sections:
    dependency, and source to the root `pyproject.toml` and the folder to pyright `extraPaths`; add
    the `COPY agents/<name>/pyproject.toml` line to `Dockerfile.python`; register in
    `backend/config.yaml`, `backend/config.compose.yaml`, and `docker-compose.yml`; add the name to
-   `AGENTS` and a `PORT_<name>` line in the root `Makefile` (§9.1); grant MCP tools in
+   `AGENTS` in the root `Makefile` (§9.1) and `VDAGENT_AGENT_TOKEN_<NAME>` to the root `.env`; grant MCP tools in
    `PERMISSIONS`; implement `agent.py`; run `uv run pytest agents/<name>`.
 3. **The contract** — §3 types and rules R1–R9, the turn lifecycle diagram.
 4. **Tools** — §6.
@@ -339,8 +351,10 @@ Sections:
 - `Dockerfile.python`: one `COPY agents/<name>/pyproject.toml agents/<name>/pyproject.toml` line
   per agent folder (incl. `_template`) before the dependency sync; `COPY agents/ agents/` stays.
 - `docker-compose.yml`: drop the shared `command` from `x-agent`; each agent service sets
-  `command: ["python", "-m", "vdagent_<name>"]`; remove `AGENT_NAME`. `GRPC_PORT: "50051"` stays.
-  `config.compose.yaml` unchanged.
+  `command: ["python", "-m", "vdagent_<name>"]`; remove `AGENT_NAME`. Agent services set
+  `VDAGENT_BACKEND: backend:50050`, `env_file: .env` (tokens + LLM settings), `depends_on: backend`;
+  the backend service `expose`s 50050 (not published) and also reads `.env`. `config.compose.yaml`:
+  `agent_listen: 0.0.0.0:50050`, agents without addresses. `.dockerignore` excludes `**/.env`.
 - Local run: `make backend`, `make agent-<name>` / `make agents` (§9.1).
 
 ### 9.1 Root `Makefile`
@@ -353,8 +367,8 @@ run the frontend.
 | Target | Does |
 |---|---|
 | `make` / `make help` | Lists the targets below with one-line descriptions (default goal). |
-| `make backend` | `uv run uvicorn vdagent_backend.app:app --port 8000`. Port fixed at 8000 because `mcp_public_url` in `backend/config.yaml` points there. |
-| `make agent-<name>` | Starts one agent: `GRPC_PORT=$(PORT_<name>) uv run python -m vdagent_<name>`, for `<name>` in `AGENTS`. Unknown name → make's "No rule to make target" error. |
+| `make backend` | `uv run uvicorn vdagent_backend.app:app --host $(HOST) --port 8000` (`HOST ?= 127.0.0.1`). Port fixed at 8000 because `mcp_public_url` in `backend/config.yaml` points there. The agent hub listens on `agent_listen`. |
+| `make agent-<name>` | Starts one agent: `uv run python -m vdagent_<name>`, for `<name>` in `AGENTS`; it dials the hub and retries, so it may start before the backend. Unknown name → make's "No rule to make target" error. |
 | `make agents` | Starts all five in one terminal: `$(MAKE) -j <n> agent-orchestrator agent-data …`; Ctrl-C stops all. Output interleaves; each log line carries the agent's logger name. |
 | `make reset-db` | Deletes `$(BACKEND_DB)` and `$(WAREHOUSE_DB)` including their `-wal`/`-shm` files, then reseeds: `data/seed_warehouse.py $(WAREHOUSE_DB)`, `data/seed_users.py $(BACKEND_DB)`. Stop the backend and agents first — deleting SQLite files under a running backend leaves it on stale file handles. |
 
@@ -362,13 +376,8 @@ Shape:
 
 ```make
 AGENTS := orchestrator data compare insight report
-# Must match the addresses in backend/config.yaml.
-PORT_orchestrator := 50051
-PORT_data         := 50052
-PORT_compare      := 50053
-PORT_insight      := 50054
-PORT_report       := 50055
 
+HOST         ?= 127.0.0.1
 BACKEND_DB   ?= var/backend.db
 WAREHOUSE_DB ?= var/warehouse.db
 
@@ -377,16 +386,16 @@ AGENT_TARGETS := $(addprefix agent-,$(AGENTS))
 .PHONY: help backend agents reset-db $(AGENT_TARGETS)
 
 help:
-	@echo "make backend        start the backend on :8000"
-	@echo "make agent-<name>   start one agent ($(AGENTS))"
-	@echo "make agents         start all agents in this terminal"
+	@echo "make backend        start the backend: HTTP on $(HOST):8000, agent hub per agent_listen"
+	@echo "make agent-<name>   start one agent ($(AGENTS)); it dials the hub at VDAGENT_BACKEND"
+	@echo "make agents         start all agents in this terminal (before or after the backend: they retry)"
 	@echo "make reset-db       delete and reseed var/backend.db and var/warehouse.db (stop the stack first)"
 
 backend:
-	uv run uvicorn vdagent_backend.app:app --port 8000
+	uv run uvicorn vdagent_backend.app:app --host $(HOST) --port 8000
 
 $(AGENT_TARGETS): agent-%:          # static pattern rule: works with .PHONY, unlike a plain agent-% rule
-	GRPC_PORT=$(PORT_$*) uv run python -m vdagent_$*
+	uv run python -m vdagent_$*
 
 agents:
 	$(MAKE) -j $(words $(AGENTS)) $(AGENT_TARGETS)
@@ -408,7 +417,8 @@ New file (none exists today). Sections:
 1. **What this is** — one paragraph; links to the main spec, this spec, and
    `agents/_template/README.md`.
 2. **Prerequisites** — uv, Python 3.12, Node 22 (frontend); repo-root `.env` with
-   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`; first-time `uv sync` and
+   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL` and `VDAGENT_AGENT_TOKEN_<NAME>` per agent
+   (optional `agents/<name>/.env` overrides); first-time `uv sync` and
    `uv run python proto/scripts/gen.py`.
 3. **Makefile usage** — the §9.1 target table, plus the typical local session:
    ```
@@ -418,31 +428,42 @@ New file (none exists today). Sections:
    cd frontend && npm install && npm run dev   # terminal 3
    ```
    and the note that `reset-db` requires the backend and agents to be stopped.
-4. **Docker** — `docker compose up --build`, then http://localhost:8000.
-5. **Tests** — `uv run pytest`; `uv run pytest agents/<name>` for one agent.
+4. **Remote agent** — Backend with `VDAGENT_AGENT_LISTEN=0.0.0.0:50050`, `make backend HOST=0.0.0.0`,
+   `VDAGENT_MCP_PUBLIC_URL` set to its LAN address; on the agent machine `agents/<name>/.env` with
+   `VDAGENT_BACKEND`, the token and LLM settings, then `make agent-<name>`.
+5. **Docker** — `docker compose up --build`, then http://localhost:8000.
+6. **Tests** — `uv run pytest`; `uv run pytest agents/<name>` for one agent.
 
 ## 10. Testing
 
-No real LLM. Tests drive the real `grpc.aio` server in-process (today's harness style).
+No real LLM. Tests run the real host against a fake in-process hub over `grpc.aio`.
+`agent_stub(agent)` keeps a call-shaped API (`Invoke()` → per-turn handle with `write`, `read`,
+`code`, `cancel`; `Compact(req)`), and a `failure` surfaces as `grpc.aio.AioRpcError` with its
+code and details, so each LiteLLM agent's `test_agent.py` is unchanged.
 
 **`test_host.py`** (template; copied into every agent — a drifted host copy fails its own test):
-- First frame not `start` → `INVALID_ARGUMENT`.
+- A `start` without history → `failure` `INVALID_ARGUMENT`.
 - Scripted brain: assistant step with tool call → tool result → final step ⇒ frames
   `message:assistant, message:tool, message:assistant, final`; `final.content` = last step content.
 - History conversion: user / assistant-with-tool-calls (`content: None`) / tool messages reach the
   brain as documented dicts; `summary`, `peers`, `mcp`, `max_steps` (0 → 12) populated.
 - Two concurrent `call_agent`s answered out of order each get their own reply.
-- Backend closes the stream while a call is pending → `call_agent` raises; turn ends.
+- `cancel` while a call is pending → the brain observes `CancelledError`; nothing more is sent for
+  that `ref`; the session keeps serving new turns.
+- Session loss → in-flight turns are cancelled and the host reconnects.
 - Each enforced rule violated (R2 assistant while unresolved, duplicate/empty ids; R3/R4
   `emit_tool_result` unknown id, `call_agent` on non-`send_to_agent`, duplicate `call_agent`,
   result while call pending; R5 return with unresolved calls, return with no final step) →
-  `ContractViolation` at the call site and stream `INTERNAL` "contract violation: …", including
+  `ContractViolation` at the call site and `failure` `INTERNAL` "contract violation: …", including
   when the brain catches it.
 - `AgentTimeoutError` (plain and inside an exception group) → `DEADLINE_EXCEEDED`; other
   exception → `INTERNAL`.
 - `Compact` returns the brain's summary; timeout mapping.
-- Health `SERVING` after `start_server`.
-- `main`: `AgentConfigError` and bad `GRPC_PORT` exit 2 with the named message.
+- The host sends `hello` with its name and token; started before the hub, it connects once the hub
+  is up.
+- `main`: `AgentConfigError`, a missing token (message names the variable), and `UNAUTHENTICATED`
+  exit 2.
+- `.env`: the agent `.env` beats the process env; the root `.env` fills the gaps.
 
 **`test_agent.py`** (template): the echo stub's reply and compact output.
 
@@ -459,7 +480,7 @@ In `2026-09-24-vdagent-design.md`:
 - §2.1 *Agents*: "one folder per agent built from `agents/_template/`" instead of "one shared
   runtime package run as five processes (`AGENT_NAME=…`)"; link this spec.
 - §2.3 layout: replace the `agents/` subtree with §2 of this spec.
-- §7.1: entrypoint `python -m vdagent_<name>`; env: `GRPC_PORT` (host) + LLM vars (LiteLLM agents);
+- §7.1: entrypoint `python -m vdagent_<name>`; env: host settings + LLM vars (LiteLLM agents);
   no `AGENT_NAME`; prompts at `vdagent_<name>/prompts/{system,compact}.md`.
 - §7.2/§7.3: note they describe the LiteLLM agents; the transport contract is this spec §3–§4.
 - §12: local-run block uses `make reset-db`, `make backend`, `make agents` (this spec §9.1);
@@ -470,11 +491,11 @@ In `2026-09-24-vdagent-design.md`:
 
 - `uv sync` succeeds; `uv run pytest` passes (backend + all six agent packages).
 - No reference to `vdagent_agents`, `vdagent-agents`, or `AGENT_NAME` remains outside git history.
-- `uv run python -m agent_template` serves; with a config entry pointing at it, a human message
-  returns `echo: …` in the UI.
+- `uv run python -m agent_template` connects once registered (config entry + token); a human
+  message returns `echo: …` in the UI.
 - `docker compose up --build` starts all services healthy; the main spec §13 E2E smoke passes
   (Orchestrator → Data → Compare → Insight → Report, saved report with a chart).
 - With the backend and agents stopped, `make reset-db` recreates both databases (demo users
   present, warehouse rebuilt); `make backend` then `make agents` bring up a stack where every
-  agent reports healthy in the UI and the E2E smoke passes; `make agent-data` starts only Data on
-  50052; `make help` lists all targets.
+  agent reports healthy in the UI and the E2E smoke passes; `make agent-data` starts only Data;
+  `make help` lists all targets.

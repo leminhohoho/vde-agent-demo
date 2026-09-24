@@ -13,17 +13,22 @@ plus `send_to_agent` to reach the other agents.
 ## Run
 
 ```
-make agent-orchestrator                                   # GRPC_PORT=50051
-GRPC_PORT=50051 uv run python -m vdagent_orchestrator      # same, by hand
+make agent-orchestrator                                   # dials the Backend's hub (VDAGENT_BACKEND)
+uv run python -m vdagent_orchestrator                     # same, by hand
 ```
 
-Environment (from the repo-root `.env`; process env wins):
+The agent connects out to the Backend and reconnects with backoff; start it before or after the
+Backend. It needs no listening port.
+
+Environment: `agents/orchestrator/.env` (wins over everything), then the process env, then the repo-root
+`.env`.
 
 | Variable | |
 |---|---|
+| `VDAGENT_AGENT_TOKEN_ORCHESTRATOR` | Required. Hub token; the Backend must have the same value. Generate with `python -c "import secrets; print(secrets.token_urlsafe(24))"`. |
+| `VDAGENT_BACKEND` | Hub address `host:port`, default `localhost:50050`. |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL` | Required. OpenAI-compatible endpoint with tool calling. |
 | `LLM_TIMEOUT_S` | Per LLM call, default 120. |
-| `GRPC_PORT` | Default 50051; must match `backend/config.yaml`. |
 
 ## Test
 

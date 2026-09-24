@@ -1,15 +1,16 @@
-"""Invocation engine (§4): scheduling, per-invocation `Agent.Invoke` streams, call checks,
+"""Invocation engine (§4): scheduling, per-invocation turns over the agent hub, call checks,
 compaction, failure / cancel / restart handling, and SSE publication.
 
 Concurrency model (single process, single event loop):
 - One `Stack` per (user, agent): `running` is the lock holder, `queue` the FIFO of waiting
   invocations (§4.2). Only the holder's asyncio task writes that stack's messages (I1).
-- One asyncio task per running invocation drives its bidi stream; `AgentCallResult`s for its
+- One asyncio task per running invocation drives its turn channel; `AgentCallResult`s for its
   child calls are pushed onto its outbound queue by whichever task finishes the child.
 - The per-user `WaitGraph` gets edge `caller → target` synchronously with the call checks, so the
   graph stays acyclic (I3).
-- Cancellation is cooperative: `cancel_task` flags the runs and cancels their in-flight RPC; each
-  run then patches its own stack (I2) before releasing it. DB writes are never interrupted.
+- Cancellation is cooperative: `cancel_task` flags the runs and cancels their in-flight turn or
+  compaction; each run then patches its own stack (I2) before releasing it. DB writes are never
+  interrupted.
 """
 
 from __future__ import annotations
@@ -18,16 +19,15 @@ import asyncio
 import json
 import logging
 from collections import deque
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-import grpc
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from vdagent_backend.config import Config
 from vdagent_backend.db import repo
-from vdagent_backend.engine.clients import AgentClients
+from vdagent_backend.engine.hub import AgentError, AgentHub
 from vdagent_backend.engine.waitgraph import WaitGraph
 from vdagent_backend.events import EventBus
 from vdagent_backend.ids import new_id
@@ -39,8 +39,6 @@ log = logging.getLogger(__name__)
 SEND_TO_AGENT = "send_to_agent"
 RESTARTED = "backend restarted"
 CANCELLED = "cancelled"
-# After `final` the BE half-closes and waits this long for the agent to end the stream.
-POST_FINAL_DRAIN_S = 5.0
 
 
 class UnknownAgentError(Exception):
@@ -83,7 +81,7 @@ class Run:
     tool_call_id: str | None = None
 
     token: str | None = None
-    rpc: Any = None  # in-flight grpc.aio call (Compact or Invoke), cancelled on task cancel
+    rpc: Any = None  # in-flight turn channel or compaction task, cancelled on task cancel
     outbound: asyncio.Queue[pb.BackendFrame | None] = field(default_factory=asyncio.Queue)
     task: asyncio.Task[None] | None = None
     cancel_requested: bool = False
@@ -123,25 +121,13 @@ def _to_proto(row: Mapping[str, Any]) -> pb.Message:
     return pb.Message(role=pb.TOOL, content=row["content"], tool_call_id=row["tool_call_id"] or "")
 
 
-def _rpc_reason(err: grpc.aio.AioRpcError) -> str:
-    details = err.details()
-    return f"{err.code().name}: {details}" if details else err.code().name
-
-
-async def _requests(queue: asyncio.Queue[pb.BackendFrame | None]) -> AsyncIterator[pb.BackendFrame]:
-    while (frame := await queue.get()) is not None:
-        yield frame
-
-
 class Engine:
-    def __init__(
-        self, cfg: Config, db: AsyncEngine, bus: EventBus, tokens: TokenRegistry, clients: AgentClients
-    ) -> None:
+    def __init__(self, cfg: Config, db: AsyncEngine, bus: EventBus, tokens: TokenRegistry, hub: AgentHub) -> None:
         self.cfg = cfg
         self.db = db
         self.bus = bus
         self.tokens = tokens
-        self.clients = clients
+        self.hub = hub
         self._stacks: dict[tuple[str, str], Stack] = {}
         self._graphs: dict[str, WaitGraph] = {}
         self._cancelled: set[str] = set()  # task ids cancelled while this process runs
@@ -151,18 +137,18 @@ class Engine:
     # ------------------------------------------------------------------ lifecycle
 
     async def start(self) -> None:
-        """Startup recovery, then the health loop."""
+        """Startup recovery, then accept agent sessions."""
         await self.recover()
-        await self.clients.start(self._on_health_change)
+        await self.hub.start(self.cfg.agent_listen, self._on_health_change)
 
     async def stop(self) -> None:
-        """Abandon running invocations (startup recovery fails them next boot) and close channels."""
+        """Abandon running invocations (startup recovery fails them next boot) and close the hub."""
         self._stopping = True
         tasks = [s.running.task for s in self._stacks.values() if s.running is not None and s.running.task]
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await self.clients.close()
+        await self.hub.close()
 
     async def recover(self) -> None:
         """§4.6: every queued/running invocation → failed (stack patched); every running task → failed."""
@@ -183,7 +169,7 @@ class Engine:
         stack = self._stacks.get((user_id, agent))
         return {
             "agent": agent,
-            "healthy": self.clients.is_healthy(agent),
+            "healthy": self.hub.is_healthy(agent),
             "busy": stack is not None and stack.running is not None,
             "queue_len": len(stack.queue) if stack is not None else 0,
         }
@@ -219,7 +205,7 @@ class Engine:
         """Human trigger (§4.1): new task + queued root invocation. Returns (task row, invocation row)."""
         if agent not in self.cfg.agents:
             raise UnknownAgentError(agent)
-        if not self.clients.is_healthy(agent):
+        if not self.hub.is_healthy(agent):
             raise AgentUnavailableError(agent)
         task, inv = await repo.create_task(self.db, user_id, agent, content)
         self._publish_task(task)
@@ -344,19 +330,19 @@ class Engine:
             run.done.set()
 
     async def _drive(self, run: Run) -> tuple[str | None, str | None]:
-        """Prepare and run the stream. Returns (final content, None) or (None, failure reason)."""
+        """Prepare and run the turn. Returns (final content, None) or (None, failure reason)."""
         try:
             return await self._execute(run), None
         except _Cancelled:
             return None, CANCELLED
         except asyncio.CancelledError:
-            if run.cancel_requested:  # local cancel of the in-flight RPC
+            if run.cancel_requested:  # local cancel of the in-flight turn or compaction
                 return None, CANCELLED
             raise
         except ProtocolError as e:
             return None, f"protocol error: {e}"
-        except grpc.aio.AioRpcError as e:
-            return None, _rpc_reason(e)
+        except AgentError as e:
+            return None, f"{e.code}: {e.detail}"
         except Exception as e:
             log.exception("invocation %s crashed", run.id)
             return None, f"internal error: {e}"
@@ -392,19 +378,17 @@ class Engine:
             max_steps=self.cfg.max_steps,
         )
         run.outbound.put_nowait(pb.BackendFrame(start=start))
-        call = self.clients.stub(run.agent).Invoke(_requests(run.outbound))
-        run.rpc = call
+        turn = self.hub.invoke(run.agent, run.outbound)
+        run.rpc = turn
         while True:
-            frame = await call.read()
-            if frame is grpc.aio.EOF:
-                raise ProtocolError("stream ended without final")
+            frame = await turn.read()
             kind = frame.WhichOneof("kind")
             if kind == "message":
                 await self._on_message(run, frame.message)
             elif kind == "call":
                 await self._on_call(run, frame.call)
             elif kind == "final":
-                return await self._on_final(run, call, frame.final.content)
+                return self._on_final(run, frame.final.content)
             else:
                 raise ProtocolError("empty agent frame")
             run.check_cancel()
@@ -491,24 +475,15 @@ class Engine:
             return "error: you cannot call yourself"
         if run.depth + 1 > self.cfg.max_depth:
             return "error: call depth limit reached; answer your caller with what you have"
-        if not self.clients.is_healthy(target):
+        if not self.hub.is_healthy(target):
             return f"error: {target} is unavailable"
         if self.graph(run.user_id).has_path(target, run.agent):
             return f"error: calling {target} would deadlock (it is waiting on you); answer with what you have"
         return None
 
-    async def _on_final(self, run: Run, call: Any, content: str) -> str:
+    def _on_final(self, run: Run, content: str) -> str:
         if run.unresolved:
             raise ProtocolError(f"final while tool calls are unresolved: {sorted(run.unresolved)}")
-        run.outbound.put_nowait(None)  # half-close; the agent should now end the stream
-        try:
-            async with asyncio.timeout(POST_FINAL_DRAIN_S):
-                extra = await call.read()
-        except TimeoutError:
-            log.warning("invocation %s: agent kept the stream open after final", run.id)
-            return content
-        if extra is not grpc.aio.EOF:
-            raise ProtocolError("frame after final")
         return content
 
     # ------------------------------------------------------------------ child results
@@ -602,14 +577,14 @@ class Engine:
             return
         previous = await repo.get_summary(self.db, run.user_id, run.agent) or ""
         request = pb.CompactRequest(previous_summary=previous, messages=[_to_proto(r) for r in rows])
-        call = self.clients.stub(run.agent).Compact(request)
-        run.rpc = call
+        compaction = asyncio.ensure_future(self.hub.compact(run.agent, request))
+        run.rpc = compaction
         try:
-            resp = await call
+            resp = await compaction
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            reason = _rpc_reason(e) if isinstance(e, grpc.aio.AioRpcError) else repr(e)
+            reason = f"{e.code}: {e.detail}" if isinstance(e, AgentError) else repr(e)
             log.warning("compaction of stack (%s, %s) failed, continuing: %s", run.user_id, run.agent, reason)
             return
         finally:

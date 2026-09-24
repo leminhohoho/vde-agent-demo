@@ -5,7 +5,7 @@ node_modules
 var
 .git
 frontend/dist
-.env
+**/.env
 **/__pycache__
 **/*.pyc
 .pytest_cache

@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from conftest import ALICE, BOB, FakeAgent, Session, make_config, seed_users, wait_for
+from conftest import ALICE, BOB, FakeAgent, Session, connect_all, make_config, seed_users, wait_for
 from vdagent_backend.app import create_app
 from vdagent_backend.db import artifacts
 from vdagent_backend.db.database import apply_schema
@@ -19,8 +19,12 @@ B = {"X-User-Id": BOB}
 
 
 @pytest.fixture
-async def client(tmp_path: Path, fake_agents: dict[str, FakeAgent]) -> AsyncIterator[httpx.AsyncClient]:
+async def client(
+    tmp_path: Path, fake_agents: dict[str, FakeAgent], monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[httpx.AsyncClient]:
     cfg = make_config(tmp_path, fake_agents)
+    for name, agent in fake_agents.items():
+        monkeypatch.setenv(f"VDAGENT_AGENT_TOKEN_{name.upper()}", agent.token)
     apply_schema(cfg.backend_db)
     seed_users(cfg.backend_db)
     app = create_app(cfg)
@@ -34,6 +38,7 @@ async def client(tmp_path: Path, fake_agents: dict[str, FakeAgent]) -> AsyncIter
 
     runner = asyncio.create_task(run_lifespan())
     await asyncio.wait_for(ready.wait(), 10)
+    await connect_all(fake_agents, app.state.services.engine.hub)
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -126,8 +131,7 @@ async def test_post_message_errors(client: httpx.AsyncClient, fake_agents: dict[
     r = await client.post("/api/agents/data/messages", json={"content": "  "}, headers=A)
     assert r.status_code == 422
 
-    await fake_agents["report"].set_healthy(False)
-    await client.app.state.services.engine.clients.check_all()  # type: ignore[attr-defined]
+    await fake_agents["report"].disconnect()
     r = await client.post("/api/agents/report/messages", json={"content": "x"}, headers=A)
     assert (r.status_code, r.json()["error"]["code"]) == (503, "agent_unavailable")
     agents = {a["name"]: a["healthy"] for a in (await client.get("/api/agents", headers=A)).json()}

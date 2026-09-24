@@ -405,19 +405,6 @@ wheels = [
 ]
 
 [[package]]
-name = "grpcio-health-checking"
-version = "1.84.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "grpcio" },
-    { name = "protobuf" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/92/a8c62e9ab04957fe06e272244ed3d7a6780aacd3b72d9d723309ffbe5e9a/grpcio_health_checking-1.84.0.tar.gz", hash = "sha256:c69ea3775a5f90cd094f294859dfd0150a560f7101a8936bf7b4e08b7186a14e", size = 17089, upload-time = "2026-09-14T07:10:24.092Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/7c/4eb98f1e644b95704ac97693995a8158bd43c3c4030b63c9e980dab7bacb/grpcio_health_checking-1.84.0-py3-none-any.whl", hash = "sha256:3eab9b688e5e09bd1d584c296d3440358f11817388db87b807edd61f45b464d1", size = 19088, upload-time = "2026-09-14T07:09:00.21Z" },
-]
-
-[[package]]
 name = "grpcio-tools"
 version = "1.84.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1405,7 +1392,6 @@ version = "0.1.0"
 source = { editable = "agents/_template" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "python-dotenv" },
     { name = "vdagent-proto" },
 ]
@@ -1413,7 +1399,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "vdagent-proto", editable = "proto" },
 ]
@@ -1426,8 +1411,8 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "fastapi" },
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "mcp" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sse-starlette" },
@@ -1440,8 +1425,8 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "mcp", specifier = ">=1.9" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "sse-starlette", specifier = ">=2.1" },
@@ -1455,7 +1440,6 @@ version = "0.1.0"
 source = { editable = "agents/compare" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "litellm" },
     { name = "mcp" },
     { name = "python-dotenv" },
@@ -1465,7 +1449,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "litellm", specifier = ">=1.50" },
     { name = "mcp", specifier = ">=1.9" },
     { name = "python-dotenv", specifier = ">=1.0" },
@@ -1478,7 +1461,6 @@ version = "0.1.0"
 source = { editable = "agents/data" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "litellm" },
     { name = "mcp" },
     { name = "python-dotenv" },
@@ -1488,7 +1470,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "litellm", specifier = ">=1.50" },
     { name = "mcp", specifier = ">=1.9" },
     { name = "python-dotenv", specifier = ">=1.0" },
@@ -1501,7 +1482,6 @@ version = "0.1.0"
 source = { editable = "agents/insight" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "litellm" },
     { name = "mcp" },
     { name = "python-dotenv" },
@@ -1511,7 +1491,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "litellm", specifier = ">=1.50" },
     { name = "mcp", specifier = ">=1.9" },
     { name = "python-dotenv", specifier = ">=1.0" },
@@ -1524,7 +1503,6 @@ version = "0.1.0"
 source = { editable = "agents/orchestrator" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "litellm" },
     { name = "mcp" },
     { name = "python-dotenv" },
@@ -1534,7 +1512,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "litellm", specifier = ">=1.50" },
     { name = "mcp", specifier = ">=1.9" },
     { name = "python-dotenv", specifier = ">=1.0" },
@@ -1547,14 +1524,12 @@ version = "0.1.0"
 source = { editable = "proto" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "protobuf" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "protobuf", specifier = ">=5.27" },
 ]
 
@@ -1564,7 +1539,6 @@ version = "0.1.0"
 source = { editable = "agents/report" }
 dependencies = [
     { name = "grpcio" },
-    { name = "grpcio-health-checking" },
     { name = "litellm" },
     { name = "mcp" },
     { name = "python-dotenv" },
@@ -1574,7 +1548,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "grpcio", specifier = ">=1.66" },
-    { name = "grpcio-health-checking", specifier = ">=1.66" },
     { name = "litellm", specifier = ">=1.50" },
     { name = "mcp", specifier = ">=1.9" },
     { name = "python-dotenv", specifier = ">=1.0" },

@@ -1,0 +1,304 @@
+"""The LiteLLM tool loop, driven through the real host with a scripted LLM and a fake MCP session."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from typing import Any
+
+import grpc
+import pytest
+from vdagent_proto import agent_pb2
+
+from ..agent import LiteLLMAgent, build_agent
+from ..contract import AgentConfigError, ToolCall
+from ..llm import AssistantMessage, LLMTimeoutError
+from ..mcp_client import MAX_TOOL_RESULT_CHARS, TRUNCATION_MARKER, McpSession, McpTool, ToolOutcome
+from ..settings import load_settings
+from .test_host import agent_stub, kinds, read_all, read_frame, start_frame
+
+SYSTEM_PROMPT = "You are the test agent."
+COMPACT_PROMPT = "Summarise the conversation."
+
+Script = AssistantMessage | Exception | Callable[[list[dict[str, Any]], list[dict[str, Any]], str], AssistantMessage]
+
+
+@dataclass
+class LLMCall:
+    messages: list[dict[str, Any]]
+    tools: list[dict[str, Any]]
+    tool_choice: str
+
+
+@dataclass
+class ScriptedLLM:
+    """Returns scripted replies in order; the last entry repeats once the script is exhausted."""
+
+    script: list[Script]
+    calls: list[LLMCall] = field(default_factory=list)
+
+    async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], tool_choice: str):
+        self.calls.append(LLMCall(json.loads(json.dumps(messages)), tools, tool_choice))
+        entry = self.script[min(len(self.calls), len(self.script)) - 1]
+        if isinstance(entry, Exception):
+            raise entry
+        if callable(entry):
+            return entry(messages, tools, tool_choice)
+        return entry
+
+
+@dataclass
+class FakeMcp:
+    tools: list[McpTool]
+    handlers: dict[str, Callable[[dict[str, Any]], ToolOutcome]]
+    calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    opened_with: list[tuple[str, str]] = field(default_factory=list)
+
+    async def list_tools(self) -> list[McpTool]:
+        return self.tools
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> ToolOutcome:
+        self.calls.append((name, arguments))
+        return self.handlers[name](arguments)
+
+    @asynccontextmanager
+    async def factory(self, url: str, token: str) -> AsyncIterator[McpSession]:
+        self.opened_with.append((url, token))
+        yield self
+
+
+RUN_QUERY = McpTool(
+    name="run_query",
+    description="Run a read-only SELECT on the warehouse.",
+    input_schema={"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]},
+)
+
+
+def tool_call(id: str, name: str, args: dict[str, Any] | str) -> ToolCall:
+    return ToolCall(id=id, name=name, arguments_json=args if isinstance(args, str) else json.dumps(args))
+
+
+def make_agent(llm: ScriptedLLM, mcp: FakeMcp) -> LiteLLMAgent:
+    return LiteLLMAgent(
+        llm=llm, mcp_session_factory=mcp.factory, system_prompt=SYSTEM_PROMPT, compact_prompt=COMPACT_PROMPT
+    )
+
+
+async def test_terminates_at_max_steps_with_tool_choice_none_on_last_step():
+    # A model that keeps asking for tools, even when told not to.
+    llm = ScriptedLLM([AssistantMessage(content="", tool_calls=[tool_call("c", "run_query", {"sql": "SELECT 1"})])])
+    mcp = FakeMcp(tools=[RUN_QUERY], handlers={"run_query": lambda a: ToolOutcome('{"dataset_id": "ds_1"}')})
+    async with agent_stub(make_agent(llm, mcp)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame(max_steps=3))
+        frames = await read_all(call)
+        assert await call.code() == grpc.StatusCode.OK
+
+    assert [c.tool_choice for c in llm.calls] == ["auto", "auto", "none"]
+    assert kinds(frames) == [
+        "message:assistant", "message:tool",
+        "message:assistant", "message:tool",
+        "message:assistant", "final",
+    ]  # fmt: skip
+    last_assistant = frames[-2].message
+    assert list(last_assistant.tool_calls) == []
+    assert frames[-1].final.content == last_assistant.content != ""
+
+
+async def test_concurrent_send_to_agent_calls_each_await_their_own_result():
+    llm = ScriptedLLM(
+        [
+            AssistantMessage(
+                content="Asking both.",
+                tool_calls=[
+                    tool_call("tc_a", "send_to_agent", {"agent": "data", "message": "revenue by region 2025"}),
+                    tool_call("tc_b", "send_to_agent", {"agent": "compare", "message": "compare ds_1 vs ds_2"}),
+                ],
+            ),
+            AssistantMessage(content="Revenue grew in every region (ds_9)."),
+        ]
+    )
+    async with agent_stub(make_agent(llm, FakeMcp(tools=[], handlers={}))) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        assert kinds([await read_frame(call)]) == ["message:assistant"]
+
+        calls = {f.call.tool_call_id: f.call for f in [await read_frame(call), await read_frame(call)]}
+        assert {k: (c.target, c.message) for k, c in calls.items()} == {
+            "tc_a": ("data", "revenue by region 2025"),
+            "tc_b": ("compare", "compare ds_1 vs ds_2"),
+        }
+
+        await call.write(
+            agent_pb2.BackendFrame(call_result=agent_pb2.AgentCallResult(tool_call_id="tc_b", ok=True, content="ds_9"))
+        )
+        first = await read_frame(call)
+        assert (first.message.role, first.message.tool_call_id, first.message.content) == (
+            agent_pb2.TOOL, "tc_b", "ds_9"
+        )  # fmt: skip
+        await call.write(
+            agent_pb2.BackendFrame(
+                call_result=agent_pb2.AgentCallResult(
+                    tool_call_id="tc_a", ok=False, content="error: calling data would deadlock"
+                )
+            )
+        )
+        second = await read_frame(call)
+        assert (second.message.tool_call_id, second.message.content) == ("tc_a", "error: calling data would deadlock")
+
+        rest = await read_all(call)
+        assert kinds(rest) == ["message:assistant", "final"]
+        assert rest[-1].final.content == "Revenue grew in every region (ds_9)."
+        assert await call.code() == grpc.StatusCode.OK
+
+    tool_messages = {m["tool_call_id"]: m["content"] for m in llm.calls[1].messages if m["role"] == "tool"}
+    assert tool_messages == {"tc_a": "error: calling data would deadlock", "tc_b": "ds_9"}
+
+
+async def test_mcp_results_are_emitted_as_tool_messages():
+    big = "x" * (MAX_TOOL_RESULT_CHARS + 500)
+    llm = ScriptedLLM(
+        [
+            AssistantMessage(
+                content="",
+                tool_calls=[
+                    tool_call("q1", "run_query", {"sql": "SELECT region FROM dim_store"}),
+                    tool_call("q2", "run_query", {"sql": "SELECT * FROM fact_sales"}),
+                ],
+            ),
+            AssistantMessage(content="Done: ds_1."),
+        ]
+    )
+    results = {"SELECT region FROM dim_store": '{"dataset_id": "ds_1"}', "SELECT * FROM fact_sales": big}
+    mcp = FakeMcp(tools=[RUN_QUERY], handlers={"run_query": lambda a: ToolOutcome(results[a["sql"]])})
+    async with agent_stub(make_agent(llm, mcp)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame(summary="User prefers EUR."))
+        frames = await read_all(call)
+
+    assert mcp.opened_with == [("http://localhost:8000/mcp", "tok-123")]
+    assert sorted(mcp.calls, key=lambda c: c[1]["sql"]) == [
+        ("run_query", {"sql": "SELECT * FROM fact_sales"}),
+        ("run_query", {"sql": "SELECT region FROM dim_store"}),
+    ]
+    tool_msgs = {f.message.tool_call_id: f.message.content for f in frames if f.message.role == agent_pb2.TOOL}
+    assert tool_msgs["q1"] == '{"dataset_id": "ds_1"}'
+    assert tool_msgs["q2"] == big[:MAX_TOOL_RESULT_CHARS] + TRUNCATION_MARKER
+
+    first = llm.calls[0]
+    assert first.messages[0] == {
+        "role": "system",
+        "content": f"{SYSTEM_PROMPT}\n\n## Summary of earlier work with this user\nUser prefers EUR.",
+    }
+    assert first.messages[1:] == [{"role": "user", "content": "[from: user] revenue by region?"}]
+    tools = {t["function"]["name"]: t["function"] for t in first.tools}
+    assert tools["run_query"]["parameters"] == RUN_QUERY.input_schema
+    assert tools["send_to_agent"]["parameters"]["properties"]["agent"]["enum"] == ["data", "compare"]
+    assert "- data: Queries the warehouse; returns dataset ids." in tools["send_to_agent"]["description"]
+
+
+async def test_tool_failures_become_error_tool_content_and_the_turn_continues():
+    def failing(args: dict[str, Any]) -> ToolOutcome:
+        if args["sql"] == "boom":
+            raise ConnectionError("MCP connection reset")
+        return ToolOutcome("only SELECT statements are allowed", is_error=True)
+
+    llm = ScriptedLLM(
+        [
+            AssistantMessage(
+                content="",
+                tool_calls=[
+                    tool_call("e1", "run_query", {"sql": "INSERT INTO x VALUES (1)"}),
+                    tool_call("e2", "run_query", {"sql": "boom"}),
+                    tool_call("e3", "run_query", "{not json"),
+                    tool_call("e4", "drop_database", {}),
+                    tool_call("e5", "send_to_agent", {"agent": "data"}),
+                ],
+            ),
+            AssistantMessage(content="I could not run that query."),
+        ]
+    )
+    mcp = FakeMcp(tools=[RUN_QUERY], handlers={"run_query": failing})
+    async with agent_stub(make_agent(llm, mcp)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        frames = await read_all(call)
+        assert await call.code() == grpc.StatusCode.OK
+
+    tool_msgs = {f.message.tool_call_id: f.message.content for f in frames if f.message.role == agent_pb2.TOOL}
+    assert tool_msgs["e1"] == "error: only SELECT statements are allowed"
+    assert tool_msgs["e2"].startswith("error:") and "MCP connection reset" in tool_msgs["e2"]
+    assert tool_msgs["e3"].startswith("error: invalid JSON arguments for 'run_query'")
+    assert tool_msgs["e4"] == "error: unknown tool 'drop_database'"
+    assert tool_msgs["e5"] == "error: send_to_agent requires a non-empty 'message'"
+    assert frames[-1].final.content == "I could not run that query."
+
+
+@pytest.mark.parametrize(
+    ("failure", "status"),
+    [
+        (LLMTimeoutError("LLM call timed out after 120s"), grpc.StatusCode.DEADLINE_EXCEEDED),
+        (RuntimeError("provider returned 500"), grpc.StatusCode.INTERNAL),
+    ],
+    ids=["timeout", "other"],
+)
+async def test_llm_failure_aborts_the_stream(failure: Exception, status: grpc.StatusCode):
+    llm = ScriptedLLM([failure])
+    async with agent_stub(make_agent(llm, FakeMcp(tools=[], handlers={}))) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        with pytest.raises(grpc.aio.AioRpcError) as err:
+            await read_all(call)
+    assert err.value.code() == status
+    assert str(failure) in (err.value.details() or "")
+
+
+async def test_compact_summarises_with_the_compact_prompt():
+    llm = ScriptedLLM([AssistantMessage(content="  - User wants EUR.\n- ds_1: revenue by region 2025  ")])
+    async with agent_stub(make_agent(llm, FakeMcp(tools=[], handlers={}))) as stub:
+        response = await stub.Compact(
+            agent_pb2.CompactRequest(
+                previous_summary="- Earlier: ds_0 is 2024 revenue.",
+                messages=[
+                    agent_pb2.Message(role=agent_pb2.USER, content="[from: user] use EUR please"),
+                    agent_pb2.Message(role=agent_pb2.ASSISTANT, content="Here is ds_1."),
+                    agent_pb2.Message(role=agent_pb2.TOOL, content="y" * 2500, tool_call_id="c1"),
+                ],
+            )
+        )
+    assert response.summary == "- User wants EUR.\n- ds_1: revenue by region 2025"
+    (only,) = llm.calls
+    assert only.tool_choice == "none"
+    assert only.messages[0] == {"role": "system", "content": COMPACT_PROMPT}
+    rendered = only.messages[1]["content"]
+    assert "ds_0 is 2024 revenue" in rendered and "[from: user] use EUR please" in rendered
+    assert "Here is ds_1." in rendered
+    assert "y" * 2000 + "…[truncated]" in rendered and "y" * 2001 not in rendered
+
+
+async def test_compact_timeout_is_deadline_exceeded():
+    llm = ScriptedLLM([LLMTimeoutError("LLM call timed out after 120s")])
+    async with agent_stub(make_agent(llm, FakeMcp(tools=[], handlers={}))) as stub:
+        with pytest.raises(grpc.aio.AioRpcError) as err:
+            await stub.Compact(agent_pb2.CompactRequest(previous_summary="", messages=[]))
+    assert err.value.code() == grpc.StatusCode.DEADLINE_EXCEEDED
+
+
+def test_settings_name_the_missing_variable_and_default_the_timeout():
+    env = {"OPENAI_API_KEY": "k", "OPENAI_BASE_URL": "http://llm"}
+    with pytest.raises(AgentConfigError, match="LLM_MODEL"):
+        load_settings(env)
+    with pytest.raises(AgentConfigError, match="LLM_TIMEOUT_S"):
+        load_settings({**env, "LLM_MODEL": "m", "LLM_TIMEOUT_S": "0"})
+    settings = load_settings({**env, "LLM_MODEL": "m"})
+    assert settings.llm_timeout_s == 120.0
+
+
+def test_build_agent_reports_missing_configuration(monkeypatch: pytest.MonkeyPatch):
+    for var in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL", "LLM_TIMEOUT_S"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    with pytest.raises(AgentConfigError, match="OPENAI_BASE_URL"):
+        build_agent()

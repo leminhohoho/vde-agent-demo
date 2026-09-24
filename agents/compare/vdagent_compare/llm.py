@@ -1,4 +1,4 @@
-"""LLM access (spec §7.1, §7.2): the `LLMClient` protocol and its LiteLLM implementation."""
+"""LLM access: the `LLMClient` protocol and its LiteLLM implementation."""
 
 from __future__ import annotations
 
@@ -10,18 +10,13 @@ from typing import Any, Literal, Protocol
 
 import litellm
 
+from .contract import ToolCall
+
 ToolChoice = Literal["auto", "none"]
 
 
 class LLMTimeoutError(Exception):
-    """The LLM call exceeded its deadline; the invocation aborts with DEADLINE_EXCEEDED."""
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    id: str
-    name: str
-    arguments_json: str
+    """The LLM call exceeded its deadline; the agent reports it as `AgentTimeoutError`."""
 
 
 @dataclass(frozen=True)

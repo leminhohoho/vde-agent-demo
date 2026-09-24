@@ -1,4 +1,4 @@
-"""MCP access for the agent loop (spec §7.2, §4.7).
+"""MCP access for the agent loop.
 
 `McpSession` is the narrow surface the loop needs; `open_mcp_session` provides it over the official
 SDK's streamable-HTTP client with the invocation's bearer token. `run_mcp_tool` applies the runtime

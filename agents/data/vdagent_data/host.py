@@ -1,0 +1,352 @@
+"""The host: runs an `Agent` as a `vdagent.v1.Agent` gRPC server with `grpc.health.v1`.
+
+COPIED FROM `agents/_template/` — do not edit in an agent folder. Change the template and re-copy.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import signal
+import sys
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import Any, NoReturn
+
+import grpc
+from dotenv import find_dotenv, load_dotenv
+from grpc_health.v1 import health, health_pb2, health_pb2_grpc
+from vdagent_proto import agent_pb2, agent_pb2_grpc
+
+from .contract import (
+    SEND_TO_AGENT,
+    Agent,
+    AgentConfigError,
+    AgentTimeoutError,
+    ContractViolation,
+    McpEndpoint,
+    Message,
+    Peer,
+    ToolCall,
+)
+
+logger = logging.getLogger(__name__)
+
+AGENT_SERVICE_NAME = agent_pb2.DESCRIPTOR.services_by_name["Agent"].full_name
+DEFAULT_MAX_STEPS = 12
+DEFAULT_GRPC_PORT = 50051
+SHUTDOWN_GRACE_S = 5.0
+
+
+class StreamClosedError(Exception):
+    """The Backend ended the stream while an agent call was still waiting for its reply."""
+
+
+def _find_timeout(exc: BaseException) -> AgentTimeoutError | None:
+    """The first `AgentTimeoutError` in `exc`, looking through exception groups."""
+    if isinstance(exc, AgentTimeoutError):
+        return exc
+    if isinstance(exc, BaseExceptionGroup):
+        for inner in exc.exceptions:  # pyright: ignore[reportUnknownVariableType]
+            found = _find_timeout(inner)  # pyright: ignore[reportUnknownArgumentType]
+            if found is not None:
+                return found
+    return None
+
+
+def _describe(exc: BaseException) -> str:
+    while isinstance(exc, BaseExceptionGroup) and exc.exceptions:  # pyright: ignore[reportUnknownMemberType]
+        exc = exc.exceptions[0]  # pyright: ignore[reportUnknownVariableType]
+    text = str(exc)
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
+async def _abort_for(context: grpc.aio.ServicerContext, error: BaseException, what: str) -> NoReturn:
+    timeout = _find_timeout(error)
+    if timeout is not None:
+        logger.warning("%s timed out: %s", what, timeout)
+        await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(timeout))
+    logger.error("%s failed", what, exc_info=error)
+    await context.abort(grpc.StatusCode.INTERNAL, _describe(error))
+    raise AssertionError("unreachable: abort raises")
+
+
+def _to_message(msg: agent_pb2.Message) -> Message | None:
+    if msg.role == agent_pb2.USER:
+        return {"role": "user", "content": msg.content}
+    if msg.role == agent_pb2.ASSISTANT:
+        if not msg.tool_calls:
+            return {"role": "assistant", "content": msg.content}
+        return {
+            "role": "assistant",
+            "content": msg.content or None,
+            "tool_calls": [
+                {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": tc.arguments_json}}
+                for tc in msg.tool_calls
+            ],
+        }
+    if msg.role == agent_pb2.TOOL:
+        return {"role": "tool", "tool_call_id": msg.tool_call_id, "content": msg.content}
+    return None
+
+
+def _to_messages(messages: Sequence[agent_pb2.Message]) -> list[Message]:
+    out: list[Message] = []
+    for msg in messages:
+        converted = _to_message(msg)
+        if converted is None:
+            logger.warning("skipping message with unspecified role")
+            continue
+        out.append(converted)
+    return out
+
+
+class _StreamContext:
+    """`InvocationContext` backed by one `Invoke` stream."""
+
+    def __init__(self, start: agent_pb2.InvokeStart, context: grpc.aio.ServicerContext) -> None:
+        self.invocation_id = start.invocation_id
+        self.task_id = start.task_id
+        self.user_id = start.user_id
+        self.summary = start.summary
+        self.history = _to_messages(start.history)
+        self.peers = [Peer(name=p.name, description=p.description) for p in start.peers]
+        self.mcp = McpEndpoint(url=start.mcp_url, token=start.mcp_token)
+        self.max_steps = start.max_steps if start.max_steps > 0 else DEFAULT_MAX_STEPS
+        self._context = context
+        self._write_lock = asyncio.Lock()
+        self._pending: dict[str, asyncio.Future[agent_pb2.AgentCallResult]] = {}
+        self._closed: BaseException | None = None
+        # Ordering guard (R2–R5), about the latest assistant step.
+        self._calls: dict[str, str] = {}  # tool_call id → tool name
+        self._unresolved: set[str] = set()
+        self._calling: set[str] = set()  # send_to_agent calls waiting for their reply
+        self._called: set[str] = set()
+        self._last_step_had_calls: bool | None = None  # None: no step emitted yet
+        self._final_content = ""
+        self._ended = False
+        self.violation: ContractViolation | None = None
+
+    def _violate(self, message: str) -> ContractViolation:
+        violation = ContractViolation(message)
+        if self.violation is None:
+            self.violation = violation
+        return violation
+
+    def _check_open(self, what: str) -> None:
+        if self._ended:
+            raise self._violate(f"{what}: the turn already ended when invoke returned (R5)")
+
+    async def _write(self, frame: agent_pb2.AgentFrame) -> None:
+        async with self._write_lock:
+            await self._context.write(frame)
+
+    async def emit_assistant(self, content: str, tool_calls: Sequence[ToolCall] = ()) -> None:
+        self._check_open("emit_assistant")
+        if self._unresolved:
+            raise self._violate(
+                f"emit_assistant: tool calls {sorted(self._unresolved)} of the previous step have no result yet (R2)"
+            )
+        ids = [tc.id for tc in tool_calls]
+        if any(not i for i in ids) or len(set(ids)) != len(ids):
+            raise self._violate(f"emit_assistant: tool-call ids must be non-empty and unique, got {ids} (R2)")
+        self._calls = {tc.id: tc.name for tc in tool_calls}
+        self._unresolved = set(ids)
+        self._called = set()
+        self._last_step_had_calls = bool(ids)
+        self._final_content = content
+        await self._write(
+            agent_pb2.AgentFrame(
+                message=agent_pb2.Message(
+                    role=agent_pb2.ASSISTANT,
+                    content=content,
+                    tool_calls=[
+                        agent_pb2.ToolCall(id=tc.id, name=tc.name, arguments_json=tc.arguments_json)
+                        for tc in tool_calls
+                    ],
+                )
+            )
+        )
+
+    async def emit_tool_result(self, tool_call_id: str, content: str) -> None:
+        what = f"emit_tool_result({tool_call_id!r})"
+        self._check_open(what)
+        if tool_call_id in self._calling:
+            raise self._violate(f"{what}: its call_agent is still waiting for the reply (R4)")
+        if tool_call_id not in self._unresolved:
+            raise self._violate(f"{what}: not an unresolved tool call of the latest assistant step (R3)")
+        self._unresolved.discard(tool_call_id)
+        await self._write(
+            agent_pb2.AgentFrame(
+                message=agent_pb2.Message(role=agent_pb2.TOOL, content=content, tool_call_id=tool_call_id)
+            )
+        )
+
+    async def call_agent(self, tool_call_id: str, target: str, message: str) -> str:
+        what = f"call_agent({tool_call_id!r})"
+        self._check_open(what)
+        name = self._calls.get(tool_call_id)
+        if name is None:
+            raise self._violate(f"{what}: not a tool call of the latest assistant step (R4)")
+        if name != SEND_TO_AGENT:
+            raise self._violate(f"{what}: tool call is {name!r}, not {SEND_TO_AGENT} (R4)")
+        if tool_call_id not in self._unresolved:
+            raise self._violate(f"{what}: tool call already has a result (R4)")
+        if tool_call_id in self._called:
+            raise self._violate(f"{what}: already called once (R4)")
+        if self._closed is not None:
+            raise self._closed
+        self._called.add(tool_call_id)
+        self._calling.add(tool_call_id)
+        future: asyncio.Future[agent_pb2.AgentCallResult] = asyncio.get_running_loop().create_future()
+        self._pending[tool_call_id] = future
+        try:
+            await self._write(
+                agent_pb2.AgentFrame(
+                    call=agent_pb2.AgentCallRequest(tool_call_id=tool_call_id, target=target, message=message)
+                )
+            )
+            result = await future
+        finally:
+            self._pending.pop(tool_call_id, None)
+            self._calling.discard(tool_call_id)
+        if result.ok or result.content.startswith("error:"):
+            return result.content
+        return f"error: {result.content or f'call to {target} failed'}"
+
+    async def read_backend_frames(self) -> None:
+        """Route `call_result` frames to waiting `call_agent`s until the Backend ends the stream."""
+        try:
+            while True:
+                frame = await self._context.read()
+                if frame is grpc.aio.EOF:
+                    self._close(StreamClosedError("the Backend closed the stream while a call was pending"))
+                    return
+                if frame.WhichOneof("kind") != "call_result":
+                    logger.warning("[%s] ignoring unexpected %s frame", self.invocation_id, frame.WhichOneof("kind"))
+                    continue
+                future = self._pending.pop(frame.call_result.tool_call_id, None)
+                if future is None or future.done():
+                    logger.warning("[%s] ignoring call_result for %r", self.invocation_id, frame.call_result.tool_call_id)
+                    continue
+                future.set_result(frame.call_result)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._close(StreamClosedError(f"reading the stream failed: {exc}"))
+
+    def _close(self, reason: BaseException) -> None:
+        self._closed = reason
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(reason)
+        self._pending.clear()
+
+    async def finish(self) -> None:
+        """End the turn after `invoke` returned: enforce R5, then send `final`."""
+        self._ended = True
+        if self.violation is not None:
+            raise self.violation
+        if self._unresolved:
+            raise self._violate(f"invoke returned with unresolved tool calls {sorted(self._unresolved)} (R5)")
+        if self._last_step_had_calls is not False:
+            raise self._violate("invoke returned without a final assistant step (one without tool calls) (R5)")
+        await self._write(agent_pb2.AgentFrame(final=agent_pb2.Final(content=self._final_content)))
+
+
+class _AgentServicer(agent_pb2_grpc.AgentServicer):
+    def __init__(self, agent: Agent) -> None:
+        self._agent = agent
+
+    async def Invoke(self, request_iterator: Any, context: grpc.aio.ServicerContext) -> None:  # noqa: N802
+        first = await context.read()
+        if first is grpc.aio.EOF or first.WhichOneof("kind") != "start":
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "the first frame must be `start`")
+        ctx = _StreamContext(first.start, context)
+        reader = asyncio.create_task(ctx.read_backend_frames())
+        try:
+            await self._agent.invoke(ctx)
+            await ctx.finish()
+            return
+        except Exception as exc:
+            error: BaseException = exc
+        finally:
+            reader.cancel()
+        if ctx.violation is not None:
+            logger.error("[%s] contract violation: %s", ctx.invocation_id, ctx.violation)
+            await context.abort(grpc.StatusCode.INTERNAL, f"contract violation: {ctx.violation}")
+        await _abort_for(context, error, f"[{ctx.invocation_id}] turn")
+
+    async def Compact(  # noqa: N802
+        self, request: agent_pb2.CompactRequest, context: grpc.aio.ServicerContext
+    ) -> agent_pb2.CompactResponse:
+        try:
+            summary = await self._agent.compact(request.previous_summary, _to_messages(request.messages))
+        except Exception as exc:
+            await _abort_for(context, exc, "compact")
+        return agent_pb2.CompactResponse(summary=summary)
+
+
+async def start_server(agent: Agent, address: str) -> tuple[grpc.aio.Server, health.aio.HealthServicer, int]:
+    """Serve `agent` plus health on `address`; returns `(server, health, bound_port)`."""
+    server = grpc.aio.server()
+    agent_pb2_grpc.add_AgentServicer_to_server(_AgentServicer(agent), server)
+    health_servicer = health.aio.HealthServicer()
+    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
+    port = server.add_insecure_port(address)
+    if port == 0:
+        raise RuntimeError(f"could not bind {address}")
+    await server.start()
+    for name in ("", AGENT_SERVICE_NAME):
+        await health_servicer.set(name, health_pb2.HealthCheckResponse.SERVING)
+    return server, health_servicer, port
+
+
+def load_env_file() -> None:
+    """Load the repo-root `.env` (nearest walking up from this file, else from the cwd); process env wins."""
+    env_file: Path | None = None
+    for directory in Path(__file__).resolve().parents:
+        candidate = directory / ".env"
+        if candidate.is_file():
+            env_file = candidate
+            break
+    else:
+        found = find_dotenv(usecwd=True)
+        env_file = Path(found) if found else None
+    if env_file is not None:
+        load_dotenv(env_file, override=False)
+
+
+async def _serve(name: str, agent: Agent, port: int) -> None:
+    server, health_servicer, bound = await start_server(agent, f"[::]:{port}")
+    logger.info("agent %s serving on port %d", name, bound)
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop.set)
+    await stop.wait()
+    logger.info("agent %s shutting down", name)
+    await health_servicer.enter_graceful_shutdown()
+    await server.stop(SHUTDOWN_GRACE_S)
+
+
+def _exit_config_error(name: str, message: str) -> NoReturn:
+    print(f"{name}: {message}", file=sys.stderr)
+    sys.exit(2)
+
+
+def main(name: str, build_agent: Callable[[], Agent]) -> None:
+    """Process entrypoint (`python -m <package>`): configure, build the agent, serve until SIGINT/SIGTERM."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    load_env_file()
+    raw_port = os.environ.get("GRPC_PORT", "").strip()
+    try:
+        port = int(raw_port) if raw_port else DEFAULT_GRPC_PORT
+    except ValueError:
+        _exit_config_error(name, f"GRPC_PORT must be an integer; got {raw_port!r}")
+    try:
+        agent = build_agent()
+    except AgentConfigError as exc:
+        _exit_config_error(name, str(exc))
+    asyncio.run(_serve(name, agent, port))

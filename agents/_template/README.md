@@ -54,9 +54,9 @@ agent keeps no state between turns.
    `backend/config.yaml` and `backend/config.compose.yaml`, a service in `docker-compose.yml`
    (`<<: *agent`, `command: ["python", "-m", "vdagent_<name>"]`), and `<name>` in `AGENTS` in the
    root `Makefile`.
-7. Create `agents/<name>/.env` with `VDAGENT_BACKEND=localhost:50050` and the brain's settings
-   (e.g. the LLM endpoint). In `docker-compose.yml`, give the service
-   `env_file: agents/<name>/.env`.
+7. `cp agents/<name>/.env.example agents/<name>/.env` (the copy of `_template` brought the example
+   along), add the settings your brain reads (e.g. the LLM endpoint) to both files, and fill in
+   `.env`. In `docker-compose.yml`, give the service `env_file: agents/<name>/.env`.
 8. Grant MCP tools in `backend/vdagent_backend/mcp/tools.py` (`ALL_AGENTS` and `PERMISSIONS`).
 9. `uv run pytest agents/<name>`, then `make agent-<name>`.
 

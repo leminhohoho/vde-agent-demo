@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1
+# One image for backend, the five agents and the seed job (spec §12).
+# Stage 1 builds the frontend; the backend serves /app/frontend/dist at `/`.
+
+FROM node:22-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /bin/
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+
+# Third-party dependencies first (cached until uv.lock / member pyproject files change).
+COPY pyproject.toml uv.lock .python-version ./
+COPY proto/pyproject.toml proto/pyproject.toml
+COPY backend/pyproject.toml backend/pyproject.toml
+COPY agents/pyproject.toml agents/pyproject.toml
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-workspace
+
+COPY proto/ proto/
+COPY backend/ backend/
+COPY agents/ agents/
+COPY data/ data/
+# Generated gRPC stubs are gitignored: generate them here. grpcio-tools lives only in the dev group,
+# so install it (at its locked version), run codegen, then prune the dev group in the same layer.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen \
+    && python proto/scripts/gen.py \
+    && uv sync --frozen --no-dev \
+    && python -c "from vdagent_proto import agent_pb2, agent_pb2_grpc"
+
+COPY --from=frontend /frontend/dist frontend/dist
+
+EXPOSE 8000 50051
+CMD ["uvicorn", "vdagent_backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

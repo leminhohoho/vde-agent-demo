@@ -1,0 +1,66 @@
+# vdagent PoC (spec §12). `docker compose up --build`, then open http://localhost:8000.
+# Agents need `.env` (OPENAI_API_KEY, OPENAI_BASE_URL, LLM_MODEL) in the repo root.
+
+x-python: &python
+  build:
+    context: .
+    dockerfile: Dockerfile.python
+  image: vdagent-python:latest
+  volumes:
+    - ./var:/app/var
+
+x-agent: &agent
+  <<: *python
+  command: ["python", "-m", "vdagent_agents.server"]
+  env_file: .env
+  restart: unless-stopped
+
+services:
+  seed:
+    <<: *python
+    command: ["sh", "-c", "python data/seed_warehouse.py && python data/seed_users.py"]
+    environment:
+      VDAGENT_CONFIG: /app/backend/config.compose.yaml
+    restart: "no"
+
+  backend:
+    <<: *python
+    command: ["uvicorn", "vdagent_backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      VDAGENT_CONFIG: /app/backend/config.compose.yaml
+    ports:
+      - "8000:8000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  orchestrator:
+    <<: *agent
+    environment:
+      AGENT_NAME: orchestrator
+      GRPC_PORT: "50051"
+
+  data:
+    <<: *agent
+    environment:
+      AGENT_NAME: data
+      GRPC_PORT: "50051"
+
+  compare:
+    <<: *agent
+    environment:
+      AGENT_NAME: compare
+      GRPC_PORT: "50051"
+
+  insight:
+    <<: *agent
+    environment:
+      AGENT_NAME: insight
+      GRPC_PORT: "50051"
+
+  report:
+    <<: *agent
+    environment:
+      AGENT_NAME: report
+      GRPC_PORT: "50051"

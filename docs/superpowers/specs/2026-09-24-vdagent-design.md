@@ -76,7 +76,7 @@ invocations and makes no routing or permission decisions.
 | BE DB access | SQLAlchemy Core (async) + `aiosqlite`; schema applied from `backend/db/schema.sql` at startup (`CREATE TABLE IF NOT EXISTS`) |
 | gRPC | `grpcio`, `grpcio-tools` (codegen), `grpcio-health-checking`; `grpc.aio` on both sides |
 | MCP | official `mcp` Python SDK (server in BE, streamable-HTTP client in agents) |
-| LLM | LiteLLM (`litellm.acompletion`), model chosen by env |
+| LLM | LiteLLM (`litellm.acompletion`) against an OpenAI-compatible endpoint; one model shared by all agents |
 | FE | React 18, Vite, TypeScript, npm, `@tanstack/react-query`, `react-markdown` + `remark-gfm`, `vega-embed` (+ `vega`, `vega-lite`), plain CSS |
 | Tests | pytest + pytest-asyncio; Vitest (FE) |
 
@@ -445,9 +445,14 @@ values parse as ISO dates), `y` quantitative, multiple `y` via `fold`; pie → `
 
 ### 7.1 Process
 
-`python -m vdagent_agents.server` with env: `AGENT_NAME` (required), `GRPC_PORT` (default 50051),
-`LLM_MODEL` (required; any LiteLLM model string — no default is assumed), provider API key env
-(per LiteLLM), `LLM_TIMEOUT_S` (default 120). Registers the `Agent` service and `grpc.health.v1`
+`python -m vdagent_agents.server`. Env (loaded from the repo-root `.env` via `python-dotenv`, process
+env wins): `AGENT_NAME` (required), `GRPC_PORT` (default 50051), `OPENAI_API_KEY` (required),
+`OPENAI_BASE_URL` (required), `LLM_MODEL` (required; model name served by that endpoint, must
+support tool calling; one model shared by all five agents), `LLM_TIMEOUT_S` (default 120).
+Missing required env → exit non-zero at startup with a message naming the variable.
+LiteLLM is called as `acompletion(model=f"openai/{LLM_MODEL}", api_base=OPENAI_BASE_URL,
+api_key=OPENAI_API_KEY, …)` — values passed explicitly, not via LiteLLM env conventions.
+Registers the `Agent` service and `grpc.health.v1`
 (set `SERVING` after startup). System prompt: `prompts/<AGENT_NAME>.md`; summariser prompt:
 `prompts/compact.md`.
 
@@ -767,14 +772,14 @@ uv sync
 uv run python proto/scripts/gen.py
 uv run python data/seed_warehouse.py && uv run python data/seed_users.py
 uv run uvicorn vdagent_backend.app:app --port 8000
-AGENT_NAME=data GRPC_PORT=50052 LLM_MODEL=… uv run python -m vdagent_agents.server   # ×5
+AGENT_NAME=data GRPC_PORT=50052 uv run python -m vdagent_agents.server   # ×5; LLM settings from .env
 cd frontend && npm install && npm run dev
 ```
 
 `docker-compose.yml`: `seed` (one-shot), `backend` (:8000, depends on seed; builds and serves the
 FE via a multi-stage build), five agent services from one Python image differing in `AGENT_NAME`
 (each `GRPC_PORT=50051`, addressed by service name via a compose-specific config override); shared
-`./var` volume; `LLM_MODEL` and provider key passed from `.env`.
+`./var` volume; `env_file: .env` on the agent services (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`).
 
 ## 13. Testing
 
@@ -802,7 +807,7 @@ content; `Compact` returns the summary.
 
 **Frontend**: `tsc --noEmit`, `vite build`, Vitest for `applyEvent` only.
 
-**E2E smoke** (manual, needs `LLM_MODEL` + key): in the browser pick Alice, ask the Orchestrator
+**E2E smoke** (manual, needs `.env` with `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`): in the browser pick Alice, ask the Orchestrator
 "Compare revenue by region in 2025 vs 2024 and write a report"; expect a task tree
 Orchestrator → Data → Compare → Insight → Report, a saved report with at least one chart, and all
 five chats showing their part of the exchange.

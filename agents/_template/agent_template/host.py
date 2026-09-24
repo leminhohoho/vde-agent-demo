@@ -22,6 +22,17 @@ AGENT_SERVICE_NAME = agent_pb2.DESCRIPTOR.services_by_name["Agent"].full_name
 DEFAULT_MAX_STEPS = 12
 
 
+class StreamClosedError(Exception):
+    """The Backend ended the stream while an agent call was still waiting for its reply."""
+
+
+def _describe(exc: BaseException) -> str:
+    while isinstance(exc, BaseExceptionGroup) and exc.exceptions:  # pyright: ignore[reportUnknownMemberType]
+        exc = exc.exceptions[0]  # pyright: ignore[reportUnknownVariableType]
+    text = str(exc)
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
 def _to_message(msg: agent_pb2.Message) -> Message | None:
     if msg.role == agent_pb2.USER:
         return {"role": "user", "content": msg.content}
@@ -66,6 +77,8 @@ class _StreamContext:
         self.max_steps = start.max_steps if start.max_steps > 0 else DEFAULT_MAX_STEPS
         self._context = context
         self._write_lock = asyncio.Lock()
+        self._pending: dict[str, asyncio.Future[agent_pb2.AgentCallResult]] = {}
+        self._closed: BaseException | None = None
         self.final_content = ""
 
     async def _write(self, frame: agent_pb2.AgentFrame) -> None:
@@ -95,7 +108,50 @@ class _StreamContext:
         )
 
     async def call_agent(self, tool_call_id: str, target: str, message: str) -> str:
-        raise NotImplementedError
+        if self._closed is not None:
+            raise self._closed
+        future: asyncio.Future[agent_pb2.AgentCallResult] = asyncio.get_running_loop().create_future()
+        self._pending[tool_call_id] = future
+        try:
+            await self._write(
+                agent_pb2.AgentFrame(
+                    call=agent_pb2.AgentCallRequest(tool_call_id=tool_call_id, target=target, message=message)
+                )
+            )
+            result = await future
+        finally:
+            self._pending.pop(tool_call_id, None)
+        if result.ok or result.content.startswith("error:"):
+            return result.content
+        return f"error: {result.content or f'call to {target} failed'}"
+
+    async def read_backend_frames(self) -> None:
+        """Route `call_result` frames to waiting `call_agent`s until the Backend ends the stream."""
+        try:
+            while True:
+                frame = await self._context.read()
+                if frame is grpc.aio.EOF:
+                    self._close(StreamClosedError("the Backend closed the stream while a call was pending"))
+                    return
+                if frame.WhichOneof("kind") != "call_result":
+                    logger.warning("[%s] ignoring unexpected %s frame", self.invocation_id, frame.WhichOneof("kind"))
+                    continue
+                future = self._pending.pop(frame.call_result.tool_call_id, None)
+                if future is None or future.done():
+                    logger.warning("[%s] ignoring call_result for %r", self.invocation_id, frame.call_result.tool_call_id)
+                    continue
+                future.set_result(frame.call_result)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._close(StreamClosedError(f"reading the stream failed: {exc}"))
+
+    def _close(self, reason: BaseException) -> None:
+        self._closed = reason
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(reason)
+        self._pending.clear()
 
     async def finish(self) -> None:
         await self._write(agent_pb2.AgentFrame(final=agent_pb2.Final(content=self.final_content)))
@@ -110,8 +166,17 @@ class _AgentServicer(agent_pb2_grpc.AgentServicer):
         if first is grpc.aio.EOF or first.WhichOneof("kind") != "start":
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "the first frame must be `start`")
         ctx = _StreamContext(first.start, context)
-        await self._agent.invoke(ctx)
-        await ctx.finish()
+        reader = asyncio.create_task(ctx.read_backend_frames())
+        try:
+            await self._agent.invoke(ctx)
+            await ctx.finish()
+            return
+        except Exception as exc:
+            error: BaseException = exc
+        finally:
+            reader.cancel()
+        logger.error("[%s] turn failed", ctx.invocation_id, exc_info=error)
+        await context.abort(grpc.StatusCode.INTERNAL, _describe(error))
 
 
 async def start_server(agent: Agent, address: str) -> tuple[grpc.aio.Server, health.aio.HealthServicer, int]:

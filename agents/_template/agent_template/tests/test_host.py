@@ -207,3 +207,93 @@ async def read_all_or_status(call: Any) -> Any:
     except grpc.aio.AioRpcError as err:
         return err.code()
     return await call.code()
+
+
+# ---------------------------------------------------------------- agent calls
+
+
+def call_result(tool_call_id: str, content: str, ok: bool = True) -> agent_pb2.BackendFrame:
+    return agent_pb2.BackendFrame(
+        call_result=agent_pb2.AgentCallResult(tool_call_id=tool_call_id, ok=ok, content=content)
+    )
+
+
+async def test_concurrent_agent_calls_each_get_their_own_reply():
+    replies: dict[str, str] = {}
+
+    async def ask(ctx: InvocationContext, tool_call_id: str, target: str, message: str) -> None:
+        replies[tool_call_id] = await ctx.call_agent(tool_call_id, target, message)
+        await ctx.emit_tool_result(tool_call_id, replies[tool_call_id])
+
+    async def brain(ctx: InvocationContext) -> None:
+        await ctx.emit_assistant(
+            "Asking both.",
+            [
+                ToolCall("tc_a", "send_to_agent", '{"agent": "data", "message": "revenue 2025"}'),
+                ToolCall("tc_b", "send_to_agent", '{"agent": "compare", "message": "ds_1 vs ds_2"}'),
+            ],
+        )
+        await asyncio.gather(
+            ask(ctx, "tc_a", "data", "revenue 2025"),
+            ask(ctx, "tc_b", "compare", "ds_1 vs ds_2"),
+        )
+        await ctx.emit_assistant("Done.")
+
+    async with agent_stub(FnAgent(brain)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        assert kinds([await read_frame(call)]) == ["message:assistant"]
+        requests = {f.call.tool_call_id: (f.call.target, f.call.message) for f in [await read_frame(call), await read_frame(call)]}
+        assert requests == {"tc_a": ("data", "revenue 2025"), "tc_b": ("compare", "ds_1 vs ds_2")}
+
+        await call.write(call_result("tc_b", "ds_9"))
+        first = await read_frame(call)
+        assert (first.message.tool_call_id, first.message.content) == ("tc_b", "ds_9")
+        await call.write(call_result("tc_a", "data failed: boom", ok=False))
+        second = await read_frame(call)
+        assert (second.message.tool_call_id, second.message.content) == ("tc_a", "error: data failed: boom")
+
+        rest = await read_all(call)
+        assert kinds(rest) == ["message:assistant", "final"]
+        assert await call.code() == grpc.StatusCode.OK
+    assert replies == {"tc_a": "error: data failed: boom", "tc_b": "ds_9"}
+
+
+async def test_failed_call_reply_already_marked_as_error_is_kept_as_is():
+    replies: list[str] = []
+
+    async def brain(ctx: InvocationContext) -> None:
+        await ctx.emit_assistant("", [ToolCall("tc", "send_to_agent", "{}")])
+        replies.append(await ctx.call_agent("tc", "data", "hi"))
+        await ctx.emit_tool_result("tc", replies[0])
+        await ctx.emit_assistant("Sorry.")
+
+    async with agent_stub(FnAgent(brain)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        await read_frame(call)
+        await read_frame(call)
+        await call.write(call_result("tc", "error: calling data would deadlock", ok=False))
+        await read_all(call)
+    assert replies == ["error: calling data would deadlock"]
+
+
+async def test_backend_closing_the_stream_fails_a_pending_call():
+    raised: list[BaseException] = []
+
+    async def brain(ctx: InvocationContext) -> None:
+        await ctx.emit_assistant("", [ToolCall("tc", "send_to_agent", "{}")])
+        try:
+            await ctx.call_agent("tc", "data", "hi")
+        except Exception as exc:
+            raised.append(exc)
+            raise
+
+    async with agent_stub(FnAgent(brain)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        await read_frame(call)
+        await read_frame(call)
+        await call.done_writing()
+        assert await read_all_or_status(call) == grpc.StatusCode.INTERNAL
+    assert len(raised) == 1

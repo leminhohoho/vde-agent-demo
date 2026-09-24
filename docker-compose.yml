@@ -11,8 +11,9 @@ x-python: &python
 
 x-agent: &agent
   <<: *python
-  command: ["python", "-m", "vdagent_agents.server"]
   env_file: .env
+  environment:
+    GRPC_PORT: "50051"
   restart: unless-stopped
 
 services:
@@ -37,30 +38,20 @@ services:
 
   orchestrator:
     <<: *agent
-    environment:
-      AGENT_NAME: orchestrator
-      GRPC_PORT: "50051"
+    command: ["python", "-m", "vdagent_orchestrator"]
 
   data:
     <<: *agent
-    environment:
-      AGENT_NAME: data
-      GRPC_PORT: "50051"
+    command: ["python", "-m", "vdagent_data"]
 
   compare:
     <<: *agent
-    environment:
-      AGENT_NAME: compare
-      GRPC_PORT: "50051"
+    command: ["python", "-m", "vdagent_compare"]
 
   insight:
     <<: *agent
-    environment:
-      AGENT_NAME: insight
-      GRPC_PORT: "50051"
+    command: ["python", "-m", "vdagent_insight"]
 
   report:
     <<: *agent
-    environment:
-      AGENT_NAME: report
-      GRPC_PORT: "50051"
+    command: ["python", "-m", "vdagent_report"]

@@ -23,7 +23,12 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version ./
 COPY proto/pyproject.toml proto/pyproject.toml
 COPY backend/pyproject.toml backend/pyproject.toml
-COPY agents/pyproject.toml agents/pyproject.toml
+COPY agents/_template/pyproject.toml agents/_template/pyproject.toml
+COPY agents/orchestrator/pyproject.toml agents/orchestrator/pyproject.toml
+COPY agents/data/pyproject.toml agents/data/pyproject.toml
+COPY agents/compare/pyproject.toml agents/compare/pyproject.toml
+COPY agents/insight/pyproject.toml agents/insight/pyproject.toml
+COPY agents/report/pyproject.toml agents/report/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-workspace
 

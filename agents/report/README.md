@@ -13,15 +13,15 @@ plus `send_to_agent` to reach the other agents.
 ## Run
 
 ```
-make agent-report                                   # dials the Backend's hub (VDAGENT_BACKEND)
-uv run python -m vdagent_report                     # same, by hand
+make agent-report                                   # from the repo root
+cd agents/report && uv run python -m vdagent_report     # same, by hand
 ```
 
 The agent connects out to the Backend and reconnects with backoff; start it before or after the
 Backend. It needs no listening port.
 
-Environment: `agents/report/.env` (wins over everything), then the process env, then the repo-root
-`.env`.
+Configure it in `agents/report/.env` (gitignored; wins over the process env, then the repo-root
+`.env` fills anything still unset). The token must equal the Backend's value in the root `.env`.
 
 | Variable | |
 |---|---|

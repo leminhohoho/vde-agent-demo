@@ -352,8 +352,9 @@ Sections:
   per agent folder (incl. `_template`) before the dependency sync; `COPY agents/ agents/` stays.
 - `docker-compose.yml`: drop the shared `command` from `x-agent`; each agent service sets
   `command: ["python", "-m", "vdagent_<name>"]`; remove `AGENT_NAME`. Agent services set
-  `VDAGENT_BACKEND: backend:50050`, `env_file: .env` (tokens + LLM settings), `depends_on: backend`;
-  the backend service `expose`s 50050 (not published) and also reads `.env`. `config.compose.yaml`:
+  `VDAGENT_BACKEND: backend:50050`, `env_file: agents/<name>/.env` (its token + LLM settings),
+  `depends_on: backend`; the backend service `expose`s 50050 (not published) and reads the root
+  `.env` (tokens). `config.compose.yaml`:
   `agent_listen: 0.0.0.0:50050`, agents without addresses. `.dockerignore` excludes `**/.env`.
 - Local run: `make backend`, one `make agent-<name>` per agent (§9.1).
 
@@ -368,7 +369,7 @@ run the frontend.
 |---|---|
 | `make` / `make help` | Lists the targets below with one-line descriptions (default goal). |
 | `make backend` | `uv run uvicorn vdagent_backend.app:app --host $(HOST) --port 8000` (`HOST ?= 127.0.0.1`). Port fixed at 8000 because `mcp_public_url` in `backend/config.yaml` points there. The agent hub listens on `agent_listen`. |
-| `make agent-<name>` | Starts one agent: `uv run python -m vdagent_<name>`, for `<name>` in `AGENTS`; it dials the hub and retries, so it may start before the backend. Unknown name → make's "No rule to make target" error. |
+| `make agent-<name>` | Starts one agent from its folder: `cd agents/<name> && uv run python -m vdagent_<name>`, for `<name>` in `AGENTS`, configured by `agents/<name>/.env`; it dials the hub and retries, so it may start before the backend. Unknown name → make's "No rule to make target" error. |
 | `make reset-db` | Deletes `$(BACKEND_DB)` and `$(WAREHOUSE_DB)` including their `-wal`/`-shm` files, then reseeds: `data/seed_warehouse.py $(WAREHOUSE_DB)`, `data/seed_users.py $(BACKEND_DB)`. Stop the backend and agents first — deleting SQLite files under a running backend leaves it on stale file handles. |
 
 Shape:
@@ -386,14 +387,14 @@ AGENT_TARGETS := $(addprefix agent-,$(AGENTS))
 
 help:
 	@echo "make backend        start the backend: HTTP on $(HOST):8000, agent hub per agent_listen"
-	@echo "make agent-<name>   start one agent ($(AGENTS)); it dials the hub at VDAGENT_BACKEND"
+	@echo "make agent-<name>   start one agent from agents/<name>/ ($(AGENTS)); settings from agents/<name>/.env"
 	@echo "make reset-db       delete and reseed var/backend.db and var/warehouse.db (stop the stack first)"
 
 backend:
 	uv run uvicorn vdagent_backend.app:app --host $(HOST) --port 8000
 
 $(AGENT_TARGETS): agent-%:          # static pattern rule: works with .PHONY, unlike a plain agent-% rule
-	uv run python -m vdagent_$*
+	cd agents/$* && uv run python -m vdagent_$*
 
 reset-db:
 	rm -f $(BACKEND_DB) $(BACKEND_DB)-wal $(BACKEND_DB)-shm $(WAREHOUSE_DB) $(WAREHOUSE_DB)-wal $(WAREHOUSE_DB)-shm
@@ -412,8 +413,8 @@ New file (none exists today). Sections:
 1. **What this is** — one paragraph; links to the main spec, this spec, and
    `agents/_template/README.md`.
 2. **Prerequisites** — uv, Python 3.12, Node 22 (frontend); repo-root `.env` with
-   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL` and `VDAGENT_AGENT_TOKEN_<NAME>` per agent
-   (optional `agents/<name>/.env` overrides); first-time `uv sync` and
+   the agent tokens (Backend), and per agent `agents/<name>/.env` with `VDAGENT_BACKEND`, its token,
+   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`; first-time `uv sync` and
    `uv run python proto/scripts/gen.py`.
 3. **Makefile usage** — the §9.1 target table, plus the typical local session:
    ```

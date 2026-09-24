@@ -1,6 +1,7 @@
 # vdagent PoC (spec §12). `docker compose up --build`, then open http://localhost:8000.
-# `.env` in the repo root holds the agent tokens (VDAGENT_AGENT_TOKEN_<NAME>) and the agents' LLM
-# settings (OPENAI_API_KEY, OPENAI_BASE_URL, LLM_MODEL). Agents dial the backend's hub at backend:50050.
+# `.env` in the repo root holds the Backend's agent tokens (VDAGENT_AGENT_TOKEN_<NAME>); each
+# `agents/<name>/.env` holds that agent's token and LLM settings (OPENAI_API_KEY, OPENAI_BASE_URL,
+# LLM_MODEL). Agents dial the backend's hub at backend:50050 (`environment` wins over `env_file`).
 
 x-python: &python
   build:
@@ -12,7 +13,6 @@ x-python: &python
 
 x-agent: &agent
   <<: *python
-  env_file: .env
   environment:
     VDAGENT_BACKEND: backend:50050
   depends_on:
@@ -45,19 +45,24 @@ services:
   orchestrator:
     <<: *agent
     command: ["python", "-m", "vdagent_orchestrator"]
+    env_file: agents/orchestrator/.env
 
   data:
     <<: *agent
     command: ["python", "-m", "vdagent_data"]
+    env_file: agents/data/.env
 
   compare:
     <<: *agent
     command: ["python", "-m", "vdagent_compare"]
+    env_file: agents/compare/.env
 
   insight:
     <<: *agent
     command: ["python", "-m", "vdagent_insight"]
+    env_file: agents/insight/.env
 
   report:
     <<: *agent
     command: ["python", "-m", "vdagent_report"]
+    env_file: agents/report/.env

@@ -13,15 +13,15 @@ plus `send_to_agent` to reach the other agents.
 ## Run
 
 ```
-make agent-insight                                   # dials the Backend's hub (VDAGENT_BACKEND)
-uv run python -m vdagent_insight                     # same, by hand
+make agent-insight                                   # from the repo root
+cd agents/insight && uv run python -m vdagent_insight     # same, by hand
 ```
 
 The agent connects out to the Backend and reconnects with backoff; start it before or after the
 Backend. It needs no listening port.
 
-Environment: `agents/insight/.env` (wins over everything), then the process env, then the repo-root
-`.env`.
+Configure it in `agents/insight/.env` (gitignored; wins over the process env, then the repo-root
+`.env` fills anything still unset). The token must equal the Backend's value in the root `.env`.
 
 | Variable | |
 |---|---|

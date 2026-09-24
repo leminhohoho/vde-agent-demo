@@ -13,15 +13,15 @@ plus `send_to_agent` to reach the other agents.
 ## Run
 
 ```
-make agent-orchestrator                                   # dials the Backend's hub (VDAGENT_BACKEND)
-uv run python -m vdagent_orchestrator                     # same, by hand
+make agent-orchestrator                                   # from the repo root
+cd agents/orchestrator && uv run python -m vdagent_orchestrator     # same, by hand
 ```
 
 The agent connects out to the Backend and reconnects with backoff; start it before or after the
 Backend. It needs no listening port.
 
-Environment: `agents/orchestrator/.env` (wins over everything), then the process env, then the repo-root
-`.env`.
+Configure it in `agents/orchestrator/.env` (gitignored; wins over the process env, then the repo-root
+`.env` fills anything still unset). The token must equal the Backend's value in the root `.env`.
 
 | Variable | |
 |---|---|

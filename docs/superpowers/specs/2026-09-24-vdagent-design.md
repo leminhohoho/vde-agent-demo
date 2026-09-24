@@ -838,7 +838,7 @@ agents:
   insight:      {description: "Explains trends, anomalies and drivers."}
   report:       {description: "Builds formatted reports with charts."}
 ```
-The BE loads the repo-root `.env` first (process env wins) and reads each agent's token from
+The BE loads the repo-root `.env` first (process env wins; it holds only the agent tokens) and reads each agent's token from
 `VDAGENT_AGENT_TOKEN_<NAME>`. The `agents:` map is the allowlist, the peer roster and the MCP
 permission key. The MCP permission matrix (§6.1) lives in code next to the tool definitions.
 
@@ -848,7 +848,7 @@ uv sync
 uv run python proto/scripts/gen.py
 uv run python data/seed_warehouse.py && uv run python data/seed_users.py
 uv run uvicorn vdagent_backend.app:app --port 8000
-uv run python -m vdagent_data                     # ×5, one per terminal (or: make agent-<name>); tokens + LLM settings from .env
+cd agents/data && uv run python -m vdagent_data   # ×5, one per terminal (or: make agent-<name>); settings from agents/<name>/.env
 cd frontend && npm install && npm run dev
 ```
 
@@ -861,9 +861,9 @@ token and LLM settings, then `make agent-<name>`. The hub has no TLS; tokens are
 `docker-compose.yml`: `seed` (one-shot), `backend` (:8000, depends on seed; builds and serves the
 FE via a multi-stage build; hub on `0.0.0.0:50050`, exposed to the compose network only, via
 `config.compose.yaml`), five agent services from one Python image, each running
-`python -m vdagent_<name>` with `VDAGENT_BACKEND=backend:50050`; shared `./var` volume;
-`env_file: .env` on the backend and agent services (tokens, `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
-`LLM_MODEL`). `.dockerignore` excludes every `.env`.
+`python -m vdagent_<name>` with `VDAGENT_BACKEND=backend:50050`; shared `./var` volume; the
+backend reads the root `.env` (tokens), each agent `env_file: agents/<name>/.env` (its token,
+`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`). `.dockerignore` excludes every `.env`.
 
 ## 13. Testing
 

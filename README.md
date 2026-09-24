@@ -14,27 +14,35 @@ run on any machine that can reach the Backend — no agent listens on a port.
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/) (Python 3.12 is picked up from `.python-version`), GNU make, Node 22 for the frontend.
-- A repo-root `.env` with the agents' model endpoint (any OpenAI-compatible server with tool
-  calling) and one hub token per agent. The Backend and each agent read the same
-  `VDAGENT_AGENT_TOKEN_<NAME>` variable; the Backend accepts an agent's session only with its token.
+- Environment files (all gitignored, never copied into Docker images):
 
-  ```
-  OPENAI_API_KEY=…
-  OPENAI_BASE_URL=https://…/v1
-  LLM_MODEL=…
-  VDAGENT_AGENT_TOKEN_ORCHESTRATOR=…
-  VDAGENT_AGENT_TOKEN_DATA=…
-  VDAGENT_AGENT_TOKEN_COMPARE=…
-  VDAGENT_AGENT_TOKEN_INSIGHT=…
-  VDAGENT_AGENT_TOKEN_REPORT=…
-  ```
+  - **Repo-root `.env`: the Backend.** One hub token per agent; the Backend accepts an agent's
+    session only with its token. An agent without a token here can never connect (the Backend
+    logs a warning at startup).
 
-  Generate each token with `python -c "import secrets; print(secrets.token_urlsafe(24))"`. An agent
-  without a token on the Backend side can never connect (the Backend logs a warning at startup).
+    ```
+    VDAGENT_AGENT_TOKEN_ORCHESTRATOR=…
+    VDAGENT_AGENT_TOKEN_DATA=…
+    VDAGENT_AGENT_TOKEN_COMPARE=…
+    VDAGENT_AGENT_TOKEN_INSIGHT=…
+    VDAGENT_AGENT_TOKEN_REPORT=…
+    ```
 
-- Optional `agents/<name>/.env`: overrides both the process environment and the root `.env` for
-  that agent only (e.g. a different `OPENAI_API_KEY`). Precedence: agent `.env` > process env >
-  root `.env`.
+  - **`agents/<name>/.env`: one agent.** Its hub address, its token (the same value as in the
+    root `.env`), and its model endpoint (any OpenAI-compatible server with tool calling):
+
+    ```
+    VDAGENT_BACKEND=localhost:50050
+    VDAGENT_AGENT_TOKEN_<NAME>=…
+    OPENAI_API_KEY=…
+    OPENAI_BASE_URL=https://…/v1
+    LLM_MODEL=…
+    LLM_TIMEOUT_S=120
+    ```
+
+  Generate each token with `python -c "import secrets; print(secrets.token_urlsafe(24))"`. An
+  agent loads its own `.env` with override, so precedence is: agent `.env` > process env >
+  repo-root `.env` (which only fills variables that are still unset).
 
 - First time only:
 
@@ -49,7 +57,7 @@ run on any machine that can reach the Backend — no agent listens on a port.
 |---|---|
 | `make` / `make help` | Lists the targets. |
 | `make backend` | Starts the backend (API, SSE, MCP, built UI) on http://localhost:8000 and the agent hub on `127.0.0.1:50050` (`agent_listen`). `HOST=0.0.0.0` serves HTTP to other machines. |
-| `make agent-<name>` | Starts one agent (`orchestrator`, `data`, `compare`, `insight`, `report`); it dials the hub at `VDAGENT_BACKEND` (default `localhost:50050`) and reconnects with backoff when the session drops. |
+| `make agent-<name>` | Starts one agent (`orchestrator`, `data`, `compare`, `insight`, `report`) from its folder: `cd agents/<name> && uv run python -m vdagent_<name>`, configured by `agents/<name>/.env`. It dials the hub at `VDAGENT_BACKEND` and reconnects with backoff when the session drops. |
 | `make reset-db` | Deletes `var/backend.db` and `var/warehouse.db` and reseeds them (demo users Alice and Bob, the deterministic warehouse). |
 
 A typical local session:
@@ -82,7 +90,8 @@ Run an agent on another machine (or another checkout) against this Backend:
    VDAGENT_AGENT_LISTEN=0.0.0.0:50050 VDAGENT_MCP_PUBLIC_URL=http://<backend-host>:8000/mcp make backend HOST=0.0.0.0
    ```
 
-2. On the agent machine, in a checkout, create `agents/<name>/.env`:
+2. On the agent machine, in a checkout, create `agents/<name>/.env` (the same file as locally, with
+   the Backend's address):
 
    ```
    VDAGENT_BACKEND=<backend-host>:50050
@@ -125,8 +134,9 @@ Run an agent on another machine (or another checkout) against this Backend:
 docker compose up --build
 ```
 
-Then open http://localhost:8000. The backend and agent services read `.env` (tokens, LLM
-settings); agents dial `backend:50050` on the compose network, which is not published.
+Then open http://localhost:8000. The backend service reads the root `.env` (tokens); each agent
+service reads its own `agents/<name>/.env`, with `VDAGENT_BACKEND` overridden to `backend:50050`
+on the compose network, which is not published. All six files must exist before `docker compose up`.
 
 ## Tests
 

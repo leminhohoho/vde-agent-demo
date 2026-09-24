@@ -53,17 +53,20 @@ agent keeps no state between turns.
    `backend/config.yaml` and `backend/config.compose.yaml`, a service in `docker-compose.yml`
    (`<<: *agent`, `command: ["python", "-m", "vdagent_<name>"]`), and `<name>` in `AGENTS` in the
    root `Makefile`.
-7. Add a token to the repo-root `.env`: `VDAGENT_AGENT_TOKEN_<NAME>=…` (generate with
-   `python -c "import secrets; print(secrets.token_urlsafe(24))"`). The Backend and the agent read
-   the same variable; restart the Backend to pick it up.
+7. Generate a token (`python -c "import secrets; print(secrets.token_urlsafe(24))"`) and put it in
+   two places: `VDAGENT_AGENT_TOKEN_<NAME>=…` in the repo-root `.env` (read by the Backend; restart
+   it to pick the token up) and in a new `agents/<name>/.env`, together with
+   `VDAGENT_BACKEND=localhost:50050` and the brain's settings (e.g. the LLM endpoint). In
+   `docker-compose.yml`, give the service `env_file: agents/<name>/.env`.
 8. Grant MCP tools in `backend/vdagent_backend/mcp/tools.py` (`ALL_AGENTS` and `PERMISSIONS`).
 9. `uv run pytest agents/<name>`, then `make agent-<name>`.
 
 ## Configuration
 
-`.env` files, highest precedence first: `agents/<name>/.env`, the process environment, the
-repo-root `.env`. Put per-agent settings (e.g. a different `OPENAI_API_KEY`, or everything a remote
-machine needs) in `agents/<name>/.env`; it never enters Docker images.
+Each agent is configured by its own `agents/<name>/.env` (gitignored; it never enters Docker
+images). Precedence, highest first: `agents/<name>/.env`, the process environment, the repo-root
+`.env` (which holds the Backend's tokens and only fills variables still unset).
+`make agent-<name>` runs the agent from its folder (`cd agents/<name> && uv run python -m vdagent_<name>`).
 
 | Variable | |
 |---|---|

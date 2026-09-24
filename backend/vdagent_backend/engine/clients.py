@@ -27,6 +27,19 @@ log = logging.getLogger(__name__)
 ChannelFactory = Callable[[str], grpc.aio.Channel]
 HealthCallback = Callable[[str, bool], None]
 
+# gRPC's default reconnect backoff grows to 120 s while an agent is down, so an agent started long
+# after the BE would stay "unhealthy" for up to two minutes. Agents are plugged in and out at
+# runtime (local addresses), so retry connecting at most every second.
+_CHANNEL_OPTIONS = [
+    ("grpc.initial_reconnect_backoff_ms", 500),
+    ("grpc.min_reconnect_backoff_ms", 500),
+    ("grpc.max_reconnect_backoff_ms", 1000),
+]
+
+
+def _default_channel(address: str) -> grpc.aio.Channel:
+    return grpc.aio.insecure_channel(address, options=_CHANNEL_OPTIONS)
+
 
 class AgentClients:
     def __init__(
@@ -37,7 +50,7 @@ class AgentClients:
         channel_factory: ChannelFactory | None = None,
         check_timeout_s: float = 5.0,
     ) -> None:
-        factory = channel_factory or grpc.aio.insecure_channel
+        factory = channel_factory or _default_channel
         self._channels = {name: factory(spec.address) for name, spec in agents.items()}
         self._agents = {name: agent_pb2_grpc.AgentStub(ch) for name, ch in self._channels.items()}
         self._health = {name: health_pb2_grpc.HealthStub(ch) for name, ch in self._channels.items()}

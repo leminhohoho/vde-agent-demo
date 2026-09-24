@@ -1,0 +1,10 @@
+.env
+var/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend/dist/
+proto/vdagent_proto/agent_pb2*.py
+proto/vdagent_proto/agent_pb2*.pyi

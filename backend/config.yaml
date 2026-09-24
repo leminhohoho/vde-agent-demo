@@ -1,0 +1,13 @@
+backend_db: ./var/backend.db
+warehouse_db: ./var/warehouse.db
+mcp_public_url: http://localhost:8000/mcp      # URL agents use to reach MCP
+frontend_dist: ./frontend/dist                  # served at / if present
+max_depth: 4
+max_steps: 12
+health_interval_s: 10
+agents:
+  orchestrator: {address: localhost:50051, description: "Talks to the user, plans, delegates, writes final answers."}
+  data:         {address: localhost:50052, description: "Queries the warehouse; returns dataset ids."}
+  compare:      {address: localhost:50053, description: "Compares datasets, periods and segments."}
+  insight:      {address: localhost:50054, description: "Explains trends, anomalies and drivers."}
+  report:       {address: localhost:50055, description: "Builds formatted reports with charts."}

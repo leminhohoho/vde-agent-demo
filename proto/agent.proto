@@ -1,0 +1,50 @@
+syntax = "proto3";
+package vdagent.v1;
+
+service Agent {
+  // BE opens one stream per invocation. The first BackendFrame MUST be `start`.
+  rpc Invoke(stream BackendFrame) returns (stream AgentFrame);
+  rpc Compact(CompactRequest) returns (CompactResponse);
+}
+// Health: standard grpc.health.v1.Health registered on the same server.
+
+enum Role { ROLE_UNSPECIFIED = 0; USER = 1; ASSISTANT = 2; TOOL = 3; }
+
+message ToolCall { string id = 1; string name = 2; string arguments_json = 3; }
+
+message Message {
+  Role role = 1;
+  string content = 2;
+  repeated ToolCall tool_calls = 3;   // assistant only
+  string tool_call_id = 4;            // tool only
+}
+
+message Peer { string name = 1; string description = 2; }
+
+message InvokeStart {
+  string invocation_id = 1;
+  string task_id = 2;
+  string user_id = 3;
+  string summary = 4;                 // rolling summary; empty if none
+  repeated Message history = 5;       // uncompacted, seq order; last item = inbound message
+  repeated Peer peers = 6;            // every other agent
+  string mcp_url = 7;
+  string mcp_token = 8;
+  int32 max_steps = 9;
+}
+
+message AgentCallResult { string tool_call_id = 1; bool ok = 2; string content = 3; }
+
+message BackendFrame {
+  oneof kind { InvokeStart start = 1; AgentCallResult call_result = 2; }
+}
+
+message AgentCallRequest { string tool_call_id = 1; string target = 2; string message = 3; }
+message Final { string content = 1; }
+
+message AgentFrame {
+  oneof kind { Message message = 1; AgentCallRequest call = 2; Final final = 3; }
+}
+
+message CompactRequest { string previous_summary = 1; repeated Message messages = 2; }
+message CompactResponse { string summary = 1; }

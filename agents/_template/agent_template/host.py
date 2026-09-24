@@ -7,23 +7,52 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Sequence
-from typing import Any
+import os
+import signal
+import sys
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import Any, NoReturn
 
 import grpc
+from dotenv import find_dotenv, load_dotenv
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from vdagent_proto import agent_pb2, agent_pb2_grpc
 
-from .contract import SEND_TO_AGENT, Agent, ContractViolation, McpEndpoint, Message, Peer, ToolCall
+from .contract import (
+    SEND_TO_AGENT,
+    Agent,
+    AgentConfigError,
+    AgentTimeoutError,
+    ContractViolation,
+    McpEndpoint,
+    Message,
+    Peer,
+    ToolCall,
+)
 
 logger = logging.getLogger(__name__)
 
 AGENT_SERVICE_NAME = agent_pb2.DESCRIPTOR.services_by_name["Agent"].full_name
 DEFAULT_MAX_STEPS = 12
+DEFAULT_GRPC_PORT = 50051
+SHUTDOWN_GRACE_S = 5.0
 
 
 class StreamClosedError(Exception):
     """The Backend ended the stream while an agent call was still waiting for its reply."""
+
+
+def _find_timeout(exc: BaseException) -> AgentTimeoutError | None:
+    """The first `AgentTimeoutError` in `exc`, looking through exception groups."""
+    if isinstance(exc, AgentTimeoutError):
+        return exc
+    if isinstance(exc, BaseExceptionGroup):
+        for inner in exc.exceptions:  # pyright: ignore[reportUnknownVariableType]
+            found = _find_timeout(inner)  # pyright: ignore[reportUnknownArgumentType]
+            if found is not None:
+                return found
+    return None
 
 
 def _describe(exc: BaseException) -> str:
@@ -31,6 +60,16 @@ def _describe(exc: BaseException) -> str:
         exc = exc.exceptions[0]  # pyright: ignore[reportUnknownVariableType]
     text = str(exc)
     return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
+
+
+async def _abort_for(context: grpc.aio.ServicerContext, error: BaseException, what: str) -> NoReturn:
+    timeout = _find_timeout(error)
+    if timeout is not None:
+        logger.warning("%s timed out: %s", what, timeout)
+        await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(timeout))
+    logger.error("%s failed", what, exc_info=error)
+    await context.abort(grpc.StatusCode.INTERNAL, _describe(error))
+    raise AssertionError("unreachable: abort raises")
 
 
 def _to_message(msg: agent_pb2.Message) -> Message | None:
@@ -237,8 +276,16 @@ class _AgentServicer(agent_pb2_grpc.AgentServicer):
         if ctx.violation is not None:
             logger.error("[%s] contract violation: %s", ctx.invocation_id, ctx.violation)
             await context.abort(grpc.StatusCode.INTERNAL, f"contract violation: {ctx.violation}")
-        logger.error("[%s] turn failed", ctx.invocation_id, exc_info=error)
-        await context.abort(grpc.StatusCode.INTERNAL, _describe(error))
+        await _abort_for(context, error, f"[{ctx.invocation_id}] turn")
+
+    async def Compact(  # noqa: N802
+        self, request: agent_pb2.CompactRequest, context: grpc.aio.ServicerContext
+    ) -> agent_pb2.CompactResponse:
+        try:
+            summary = await self._agent.compact(request.previous_summary, _to_messages(request.messages))
+        except Exception as exc:
+            await _abort_for(context, exc, "compact")
+        return agent_pb2.CompactResponse(summary=summary)
 
 
 async def start_server(agent: Agent, address: str) -> tuple[grpc.aio.Server, health.aio.HealthServicer, int]:
@@ -254,3 +301,52 @@ async def start_server(agent: Agent, address: str) -> tuple[grpc.aio.Server, hea
     for name in ("", AGENT_SERVICE_NAME):
         await health_servicer.set(name, health_pb2.HealthCheckResponse.SERVING)
     return server, health_servicer, port
+
+
+def load_env_file() -> None:
+    """Load the repo-root `.env` (nearest walking up from this file, else from the cwd); process env wins."""
+    env_file: Path | None = None
+    for directory in Path(__file__).resolve().parents:
+        candidate = directory / ".env"
+        if candidate.is_file():
+            env_file = candidate
+            break
+    else:
+        found = find_dotenv(usecwd=True)
+        env_file = Path(found) if found else None
+    if env_file is not None:
+        load_dotenv(env_file, override=False)
+
+
+async def _serve(name: str, agent: Agent, port: int) -> None:
+    server, health_servicer, bound = await start_server(agent, f"[::]:{port}")
+    logger.info("agent %s serving on port %d", name, bound)
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop.set)
+    await stop.wait()
+    logger.info("agent %s shutting down", name)
+    await health_servicer.enter_graceful_shutdown()
+    await server.stop(SHUTDOWN_GRACE_S)
+
+
+def _exit_config_error(name: str, message: str) -> NoReturn:
+    print(f"{name}: {message}", file=sys.stderr)
+    sys.exit(2)
+
+
+def main(name: str, build_agent: Callable[[], Agent]) -> None:
+    """Process entrypoint (`python -m <package>`): configure, build the agent, serve until SIGINT/SIGTERM."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    load_env_file()
+    raw_port = os.environ.get("GRPC_PORT", "").strip()
+    try:
+        port = int(raw_port) if raw_port else DEFAULT_GRPC_PORT
+    except ValueError:
+        _exit_config_error(name, f"GRPC_PORT must be an integer; got {raw_port!r}")
+    try:
+        agent = build_agent()
+    except AgentConfigError as exc:
+        _exit_config_error(name, str(exc))
+    asyncio.run(_serve(name, agent, port))

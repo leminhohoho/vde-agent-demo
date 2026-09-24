@@ -13,10 +13,11 @@ from typing import Any
 
 import grpc
 import pytest
+from grpc_health.v1 import health_pb2, health_pb2_grpc
 from vdagent_proto import agent_pb2, agent_pb2_grpc
 
-from ..contract import ContractViolation, InvocationContext, Message, ToolCall
-from ..host import start_server
+from ..contract import AgentConfigError, AgentTimeoutError, ContractViolation, InvocationContext, Message, ToolCall
+from ..host import main, start_server
 
 Brain = Callable[[InvocationContext], Awaitable[None]]
 
@@ -451,3 +452,148 @@ async def test_violating_call_writes_no_frame():
         except grpc.aio.AioRpcError:
             pass
     assert frames_seen == ["message:assistant"]
+
+
+# ---------------------------------------------------------------- errors
+
+
+async def timeout_plain(ctx: InvocationContext) -> None:
+    raise AgentTimeoutError("LLM call timed out after 120s")
+
+
+async def timeout_in_task_group(ctx: InvocationContext) -> None:
+    async def slow() -> None:
+        raise AgentTimeoutError("LLM call timed out after 120s")
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(slow())
+
+
+async def provider_error(ctx: InvocationContext) -> None:
+    raise RuntimeError("provider returned 500")
+
+
+@pytest.mark.parametrize(
+    ("brain", "status", "detail"),
+    [
+        (timeout_plain, grpc.StatusCode.DEADLINE_EXCEEDED, "LLM call timed out after 120s"),
+        (timeout_in_task_group, grpc.StatusCode.DEADLINE_EXCEEDED, "LLM call timed out after 120s"),
+        (provider_error, grpc.StatusCode.INTERNAL, "RuntimeError: provider returned 500"),
+    ],
+    ids=["timeout", "timeout-in-group", "other"],
+)
+async def test_brain_exceptions_map_to_grpc_status(brain: Brain, status: grpc.StatusCode, detail: str):
+    async with agent_stub(FnAgent(brain)) as stub:
+        call = stub.Invoke()
+        await call.write(start_frame())
+        with pytest.raises(grpc.aio.AioRpcError) as err:
+            await read_all(call)
+    assert err.value.code() == status
+    assert detail in (err.value.details() or "")
+
+
+# ---------------------------------------------------------------- compact
+
+
+async def test_compact_hands_messages_to_the_brain_and_returns_its_summary():
+    received: list[tuple[str, list[Message]]] = []
+
+    async def compact(previous_summary: str, messages: list[Message]) -> str:
+        received.append((previous_summary, messages))
+        return "- ds_1: revenue by region 2025"
+
+    async def unused(ctx: InvocationContext) -> None:
+        raise AssertionError("must not run")
+
+    async with agent_stub(FnAgent(unused, compact)) as stub:
+        response = await stub.Compact(
+            agent_pb2.CompactRequest(
+                previous_summary="- ds_0: 2024 revenue",
+                messages=[
+                    agent_pb2.Message(role=agent_pb2.USER, content="[from: user] use EUR"),
+                    agent_pb2.Message(
+                        role=agent_pb2.ASSISTANT,
+                        tool_calls=[agent_pb2.ToolCall(id="c1", name="run_query", arguments_json="{}")],
+                    ),
+                    agent_pb2.Message(role=agent_pb2.TOOL, content="ds_1", tool_call_id="c1"),
+                ],
+            )
+        )
+    assert response.summary == "- ds_1: revenue by region 2025"
+    assert received == [
+        (
+            "- ds_0: 2024 revenue",
+            [
+                {"role": "user", "content": "[from: user] use EUR"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "run_query", "arguments": "{}"}}],
+                },
+                {"role": "tool", "tool_call_id": "c1", "content": "ds_1"},
+            ],
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("failure", "status"),
+    [(AgentTimeoutError("summariser timed out"), grpc.StatusCode.DEADLINE_EXCEEDED), (RuntimeError("boom"), grpc.StatusCode.INTERNAL)],
+    ids=["timeout", "other"],
+)
+async def test_compact_failures_map_to_grpc_status(failure: Exception, status: grpc.StatusCode):
+    async def compact(previous_summary: str, messages: list[Message]) -> str:
+        raise failure
+
+    async def unused(ctx: InvocationContext) -> None:
+        raise AssertionError("must not run")
+
+    async with agent_stub(FnAgent(unused, compact)) as stub:
+        with pytest.raises(grpc.aio.AioRpcError) as err:
+            await stub.Compact(agent_pb2.CompactRequest(previous_summary="", messages=[]))
+    assert err.value.code() == status
+    assert str(failure) in (err.value.details() or "")
+
+
+# ---------------------------------------------------------------- process
+
+
+async def test_health_reports_serving_after_startup():
+    async def unused(ctx: InvocationContext) -> None:
+        raise AssertionError("must not run")
+
+    server, _, port = await start_server(FnAgent(unused), "127.0.0.1:0")
+    try:
+        async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            stub = health_pb2_grpc.HealthStub(channel)
+            overall = await stub.Check(health_pb2.HealthCheckRequest(service=""))
+            service = await stub.Check(health_pb2.HealthCheckRequest(service="vdagent.v1.Agent"))
+    finally:
+        await server.stop(None)
+    assert overall.status == service.status == health_pb2.HealthCheckResponse.SERVING
+
+
+def test_main_exits_2_naming_the_config_problem(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    def build_agent() -> Any:
+        raise AgentConfigError("missing required environment variable LLM_MODEL")
+
+    monkeypatch.setenv("GRPC_PORT", "0")
+    with pytest.raises(SystemExit) as exit_info:
+        main("echo", build_agent)
+    assert exit_info.value.code == 2
+    assert "echo: missing required environment variable LLM_MODEL" in capsys.readouterr().err
+
+
+def test_main_rejects_a_non_integer_port(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    built: list[bool] = []
+
+    def build_agent() -> Any:
+        built.append(True)
+        return None
+
+    monkeypatch.setenv("GRPC_PORT", "fifty")
+    with pytest.raises(SystemExit) as exit_info:
+        main("echo", build_agent)
+    assert exit_info.value.code == 2
+    assert "echo: GRPC_PORT must be an integer; got 'fifty'" in capsys.readouterr().err
+    assert built == []

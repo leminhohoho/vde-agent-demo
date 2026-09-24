@@ -16,7 +16,8 @@ Replace the single shared agent runtime (`agents/vdagent_agents/`, one package r
    (`agents/orchestrator/`, `data/`, `compare/`, `insight/`, `report/`), behaviour unchanged.
 
 In scope: template (host, contract, stub agent, tests, README with framework recipes), migration of
-the five agents, workspace/pytest/pyright config, Docker/compose, amendments to the main spec.
+the five agents, workspace/pytest/pyright config, Docker/compose, a root `Makefile` for local
+development and a root `README.md` documenting it (§9.1–§9.2), amendments to the main spec.
 
 Out of scope: any Backend, proto, or Frontend change; non-Python agents; a runnable non-LiteLLM
 example agent; a local-tool registry in the LiteLLM agents (local tools are a documented capability
@@ -310,8 +311,9 @@ Sections:
    `vdagent_<name>`; set `name` and `packages` in `pyproject.toml`; set `NAME`; add the member,
    dependency, and source to the root `pyproject.toml` and the folder to pyright `extraPaths`; add
    the `COPY agents/<name>/pyproject.toml` line to `Dockerfile.python`; register in
-   `backend/config.yaml`, `backend/config.compose.yaml`, and `docker-compose.yml`; grant MCP tools
-   in `PERMISSIONS`; implement `agent.py`; run `uv run pytest agents/<name>`.
+   `backend/config.yaml`, `backend/config.compose.yaml`, and `docker-compose.yml`; add the name to
+   `AGENTS` and a `PORT_<name>` line in the root `Makefile` (§9.1); grant MCP tools in
+   `PERMISSIONS`; implement `agent.py`; run `uv run pytest agents/<name>`.
 3. **The contract** — §3 types and rules R1–R9, the turn lifecycle diagram.
 4. **Tools** — §6.
 5. **Recipes** (unexecuted sketches, marked as such, written against the frameworks' docs current
@@ -339,7 +341,85 @@ Sections:
 - `docker-compose.yml`: drop the shared `command` from `x-agent`; each agent service sets
   `command: ["python", "-m", "vdagent_<name>"]`; remove `AGENT_NAME`. `GRPC_PORT: "50051"` stays.
   `config.compose.yaml` unchanged.
-- Local run: `GRPC_PORT=50052 uv run python -m vdagent_data` (×5).
+- Local run: `make backend`, `make agent-<name>` / `make agents` (§9.1).
+
+### 9.1 Root `Makefile`
+
+New file `Makefile` at the repo root: the local-development entry point. GNU make; every recipe
+runs from the repo root through `uv run`, so the workspace venv and relative config paths
+(`./var/…`) resolve as today. It does not set up the environment (`uv sync`, proto codegen) or
+run the frontend.
+
+| Target | Does |
+|---|---|
+| `make` / `make help` | Lists the targets below with one-line descriptions (default goal). |
+| `make backend` | `uv run uvicorn vdagent_backend.app:app --port 8000`. Port fixed at 8000 because `mcp_public_url` in `backend/config.yaml` points there. |
+| `make agent-<name>` | Starts one agent: `GRPC_PORT=$(PORT_<name>) uv run python -m vdagent_<name>`, for `<name>` in `AGENTS`. Unknown name → make's "No rule to make target" error. |
+| `make agents` | Starts all five in one terminal: `$(MAKE) -j <n> agent-orchestrator agent-data …`; Ctrl-C stops all. Output interleaves; each log line carries the agent's logger name. |
+| `make reset-db` | Deletes `$(BACKEND_DB)` and `$(WAREHOUSE_DB)` including their `-wal`/`-shm` files, then reseeds: `data/seed_warehouse.py $(WAREHOUSE_DB)`, `data/seed_users.py $(BACKEND_DB)`. Stop the backend and agents first — deleting SQLite files under a running backend leaves it on stale file handles. |
+
+Shape:
+
+```make
+AGENTS := orchestrator data compare insight report
+# Must match the addresses in backend/config.yaml.
+PORT_orchestrator := 50051
+PORT_data         := 50052
+PORT_compare      := 50053
+PORT_insight      := 50054
+PORT_report       := 50055
+
+BACKEND_DB   ?= var/backend.db
+WAREHOUSE_DB ?= var/warehouse.db
+
+.DEFAULT_GOAL := help
+AGENT_TARGETS := $(addprefix agent-,$(AGENTS))
+.PHONY: help backend agents reset-db $(AGENT_TARGETS)
+
+help:
+	@echo "make backend        start the backend on :8000"
+	@echo "make agent-<name>   start one agent ($(AGENTS))"
+	@echo "make agents         start all agents in this terminal"
+	@echo "make reset-db       delete and reseed var/backend.db and var/warehouse.db (stop the stack first)"
+
+backend:
+	uv run uvicorn vdagent_backend.app:app --port 8000
+
+$(AGENT_TARGETS): agent-%:          # static pattern rule: works with .PHONY, unlike a plain agent-% rule
+	GRPC_PORT=$(PORT_$*) uv run python -m vdagent_$*
+
+agents:
+	$(MAKE) -j $(words $(AGENTS)) $(AGENT_TARGETS)
+
+reset-db:
+	rm -f $(BACKEND_DB) $(BACKEND_DB)-wal $(BACKEND_DB)-shm $(WAREHOUSE_DB) $(WAREHOUSE_DB)-wal $(WAREHOUSE_DB)-shm
+	uv run python data/seed_warehouse.py $(WAREHOUSE_DB)
+	uv run python data/seed_users.py $(BACKEND_DB)
+```
+
+`BACKEND_DB` / `WAREHOUSE_DB` are overridable (`make reset-db BACKEND_DB=/tmp/b.db`); the seeds
+receive the same paths the target deletes. They do not reconfigure the backend — pair an override
+with the matching `VDAGENT_BACKEND_DB` / `VDAGENT_WAREHOUSE_DB` when starting it. The template
+(`agent_template`) is not in `AGENTS`; it is run directly with `uv run python -m agent_template`.
+
+### 9.2 Root `README.md`
+
+New file (none exists today). Sections:
+1. **What this is** — one paragraph; links to the main spec, this spec, and
+   `agents/_template/README.md`.
+2. **Prerequisites** — uv, Python 3.12, Node 22 (frontend); repo-root `.env` with
+   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`; first-time `uv sync` and
+   `uv run python proto/scripts/gen.py`.
+3. **Makefile usage** — the §9.1 target table, plus the typical local session:
+   ```
+   make reset-db          # first run, or to start from clean data
+   make backend           # terminal 1
+   make agents            # terminal 2 (or: make agent-data, … one per terminal)
+   cd frontend && npm install && npm run dev   # terminal 3
+   ```
+   and the note that `reset-db` requires the backend and agents to be stopped.
+4. **Docker** — `docker compose up --build`, then http://localhost:8000.
+5. **Tests** — `uv run pytest`; `uv run pytest agents/<name>` for one agent.
 
 ## 10. Testing
 
@@ -382,7 +462,8 @@ In `2026-09-24-vdagent-design.md`:
 - §7.1: entrypoint `python -m vdagent_<name>`; env: `GRPC_PORT` (host) + LLM vars (LiteLLM agents);
   no `AGENT_NAME`; prompts at `vdagent_<name>/prompts/{system,compact}.md`.
 - §7.2/§7.3: note they describe the LiteLLM agents; the transport contract is this spec §3–§4.
-- §12: local-run line and compose paragraph per §9.
+- §12: local-run block uses `make reset-db`, `make backend`, `make agents` (this spec §9.1);
+  compose paragraph per §9.
 - §13 *Agent runtime*: point to this spec §10.
 
 ## 12. Acceptance
@@ -393,3 +474,7 @@ In `2026-09-24-vdagent-design.md`:
   returns `echo: …` in the UI.
 - `docker compose up --build` starts all services healthy; the main spec §13 E2E smoke passes
   (Orchestrator → Data → Compare → Insight → Report, saved report with a chart).
+- With the backend and agents stopped, `make reset-db` recreates both databases (demo users
+  present, warehouse rebuilt); `make backend` then `make agents` bring up a stack where every
+  agent reports healthy in the UI and the E2E smoke passes; `make agent-data` starts only Data on
+  50052; `make help` lists all targets.

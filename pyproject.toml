@@ -3,28 +3,29 @@ name = "vdagent"
 version = "0.1.0"
 description = "vdagent PoC: multi-agent analytics assistant (uv workspace root)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["vdagent-proto", "vdagent-backend", "vdagent-agents"]
+dependencies = ["vdagent-proto", "vdagent-backend", "vdagent-agents", "vdagent-agent-template"]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["proto", "backend", "agents"]
+members = ["proto", "backend", "agents/_legacy", "agents/_template"]
 
 [tool.uv.sources]
 vdagent-proto = { workspace = true }
 vdagent-backend = { workspace = true }
 vdagent-agents = { workspace = true }
+vdagent-agent-template = { workspace = true }
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "grpcio-tools>=1.66"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["backend/tests", "agents/tests"]
+testpaths = ["backend/tests", "agents"]
 
 [tool.basedpyright]
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"
-extraPaths = ["proto", "backend", "agents"]
+extraPaths = ["proto", "backend", "agents/_legacy", "agents/_template"]

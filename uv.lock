@@ -5,6 +5,7 @@ requires-python = "==3.12.*"
 [manifest]
 members = [
     "vdagent",
+    "vdagent-agent-template",
     "vdagent-agents",
     "vdagent-backend",
     "vdagent-proto",
@@ -1356,6 +1357,7 @@ name = "vdagent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "vdagent-agent-template" },
     { name = "vdagent-agents" },
     { name = "vdagent-backend" },
     { name = "vdagent-proto" },
@@ -1371,7 +1373,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "vdagent-agents", editable = "agents" },
+    { name = "vdagent-agent-template", editable = "agents/_template" },
+    { name = "vdagent-agents", editable = "agents/_legacy" },
     { name = "vdagent-backend", editable = "backend" },
     { name = "vdagent-proto", editable = "proto" },
 ]
@@ -1385,9 +1388,28 @@ dev = [
 ]
 
 [[package]]
+name = "vdagent-agent-template"
+version = "0.1.0"
+source = { editable = "agents/_template" }
+dependencies = [
+    { name = "grpcio" },
+    { name = "grpcio-health-checking" },
+    { name = "python-dotenv" },
+    { name = "vdagent-proto" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "grpcio", specifier = ">=1.66" },
+    { name = "grpcio-health-checking", specifier = ">=1.66" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "vdagent-proto", editable = "proto" },
+]
+
+[[package]]
 name = "vdagent-agents"
 version = "0.1.0"
-source = { editable = "agents" }
+source = { editable = "agents/_legacy" }
 dependencies = [
     { name = "grpcio" },
     { name = "grpcio-health-checking" },

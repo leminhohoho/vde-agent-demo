@@ -60,7 +60,8 @@ flowchart LR
 - *MCP server* (§6) at `/mcp` — warehouse and artifact tools; per-agent tool filtering; identity
   from a per-invocation bearer token.
 
-**Agents** — one shared runtime package run as five processes (`AGENT_NAME=orchestrator|data|compare|insight|report`).
+**Agents** — one self-contained folder per agent (`agents/<name>/`), each built from the copyable
+template `agents/_template/` (see `2026-09-24-agent-template-design.md`) and run as its own process.
 An agent owns only its "brain": system prompt, model, summarisation. It holds no state between
 invocations and makes no routing or permission decisions.
 
@@ -71,7 +72,7 @@ invocations and makes no routing or permission decisions.
 | Area | Choice |
 |---|---|
 | Language | Python 3.12 |
-| Python packaging | uv workspace (root `pyproject.toml`; members `proto`, `backend`, `agents`) |
+| Python packaging | uv workspace (root `pyproject.toml`; members `proto`, `backend`, `agents/_template`, `agents/<name>` ×5) |
 | BE web | FastAPI, uvicorn, `sse-starlette` |
 | BE DB access | SQLAlchemy Core (async) + `aiosqlite`; schema applied from `backend/db/schema.sql` at startup (`CREATE TABLE IF NOT EXISTS`) |
 | gRPC | `grpcio`, `grpcio-tools` (codegen), `grpcio-health-checking`; `grpc.aio` on both sides |
@@ -102,14 +103,19 @@ backend/
     events.py                 # per-user SSE fan-out
   tests/
 agents/
-  pyproject.toml
-  vdagent_agents/
-    server.py                 # grpc.aio server: Agent service + health
-    loop.py                   # LLM tool loop
-    llm.py                    # LLMClient protocol + LiteLLM implementation
-    mcp_client.py
-    prompts/{orchestrator,data,compare,insight,report,compact}.md
-  tests/
+  _template/                  # copyable skeleton (agent-template spec §2)
+    README.md, pyproject.toml
+    agent_template/{__main__,contract,host,agent}.py, tests/
+  <name>/                     # orchestrator, data, compare, insight, report
+    README.md, pyproject.toml
+    vdagent_<name>/
+      __main__.py, contract.py, host.py   # template copies: gRPC host (Agent service + health)
+      agent.py                # LiteLLM tool loop + compaction
+      llm.py                  # LLMClient protocol + LiteLLM implementation
+      mcp_client.py, settings.py
+      prompts/{system,compact}.md
+      tests/{test_host,test_agent}.py
+Makefile                      # local dev: backend, agent-<name>, agents, reset-db
 data/
   seed_warehouse.py           # builds var/warehouse.db (seed 42)
   seed_users.py               # inserts demo users into var/backend.db
@@ -445,16 +451,19 @@ values parse as ISO dates), `y` quantitative, multiple `y` via `fold`; pie → `
 
 ### 7.1 Process
 
-`python -m vdagent_agents.server`. Env (loaded from the repo-root `.env` via `python-dotenv`, process
-env wins): `AGENT_NAME` (required), `GRPC_PORT` (default 50051), `OPENAI_API_KEY` (required),
-`OPENAI_BASE_URL` (required), `LLM_MODEL` (required; model name served by that endpoint, must
-support tool calling; one model shared by all five agents), `LLM_TIMEOUT_S` (default 120).
-Missing required env → exit non-zero at startup with a message naming the variable.
-LiteLLM is called as `acompletion(model=f"openai/{LLM_MODEL}", api_base=OPENAI_BASE_URL,
+`python -m vdagent_<name>` (template entrypoint; see the agent-template spec §3–§4 for the
+transport contract every agent implements). The host reads `GRPC_PORT` (default 50051); the
+LiteLLM agents read, from the repo-root `.env` via `python-dotenv` (process env wins),
+`OPENAI_API_KEY` (required), `OPENAI_BASE_URL` (required), `LLM_MODEL` (required; model name
+served by that endpoint, must support tool calling; one model shared by all five agents),
+`LLM_TIMEOUT_S` (default 120). Missing required env → exit 2 at startup with a message naming the
+variable. LiteLLM is called as `acompletion(model=f"openai/{LLM_MODEL}", api_base=OPENAI_BASE_URL,
 api_key=OPENAI_API_KEY, …)` — values passed explicitly, not via LiteLLM env conventions.
-Registers the `Agent` service and `grpc.health.v1`
-(set `SERVING` after startup). System prompt: `prompts/<AGENT_NAME>.md`; summariser prompt:
-`prompts/compact.md`.
+Registers the `Agent` service and `grpc.health.v1` (set `SERVING` after startup). System prompt:
+`vdagent_<name>/prompts/system.md`; summariser prompt: `prompts/compact.md`.
+
+§7.2 and §7.3 describe the brain of the five LiteLLM agents (`agent.py`); the host translates its
+`ctx.emit_*` / `ctx.call_agent` calls into the frames below.
 
 ### 7.2 `Invoke` loop
 
@@ -772,14 +781,17 @@ uv sync
 uv run python proto/scripts/gen.py
 uv run python data/seed_warehouse.py && uv run python data/seed_users.py
 uv run uvicorn vdagent_backend.app:app --port 8000
-AGENT_NAME=data GRPC_PORT=50052 uv run python -m vdagent_agents.server   # ×5; LLM settings from .env
+GRPC_PORT=50052 uv run python -m vdagent_data     # ×5 (or: make agents); LLM settings from .env
 cd frontend && npm install && npm run dev
 ```
 
+Or with the root `Makefile`: `make reset-db`, `make backend`, `make agents` (or `make agent-<name>`).
+
 `docker-compose.yml`: `seed` (one-shot), `backend` (:8000, depends on seed; builds and serves the
-FE via a multi-stage build), five agent services from one Python image differing in `AGENT_NAME`
-(each `GRPC_PORT=50051`, addressed by service name via a compose-specific config override); shared
-`./var` volume; `env_file: .env` on the agent services (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`).
+FE via a multi-stage build), five agent services from one Python image, each running
+`python -m vdagent_<name>` (each `GRPC_PORT=50051`, addressed by service name via a
+compose-specific config override); shared `./var` volume; `env_file: .env` on the agent services
+(`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`).
 
 ## 13. Testing
 
@@ -800,10 +812,12 @@ No real LLM in automated tests.
 per-agent `tools/list` filter and `tools/call` rejection; other-user dataset → not found;
 `query_datasets` joining two datasets; invalid/revoked token → 401.
 
-**Agent runtime** (scripted `LLMClient`, fake MCP): terminates at `max_steps` with
-`tool_choice="none"` on the last step; concurrent `send_to_agent` calls each produce a `call` and
-consume the matching `call_result`; MCP results emitted as `message(tool)`; MCP error becomes tool
-content; `Compact` returns the summary.
+**Agents** (see the agent-template spec §10): every agent folder's `tests/test_host.py` drives its
+host copy over in-process gRPC (frame order, call routing, rules R2–R5, error mapping, Compact,
+health, startup errors). Each LiteLLM agent's `tests/test_agent.py` (scripted `LLMClient`, fake
+MCP): terminates at `max_steps` with `tool_choice="none"` on the last step; concurrent
+`send_to_agent` calls each produce a `call` and consume the matching `call_result`; MCP results
+emitted as `message(tool)`; MCP error becomes tool content; `Compact` returns the summary.
 
 **Frontend**: `tsc --noEmit`, `vite build`, Vitest for `applyEvent` only.
 

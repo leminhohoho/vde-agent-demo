@@ -20,12 +20,10 @@ cd agents/report && uv run python -m vdagent_report     # same, by hand
 The agent connects out to the Backend and reconnects with backoff; start it before or after the
 Backend. It needs no listening port.
 
-Configure it in `agents/report/.env` (gitignored; wins over the process env, then the repo-root
-`.env` fills anything still unset). The token must equal the Backend's value in the root `.env`.
+Configure it in `agents/report/.env` (gitignored; it wins over the process env).
 
 | Variable | |
 |---|---|
-| `VDAGENT_AGENT_TOKEN_REPORT` | Required. Hub token; the Backend must have the same value. Generate with `python -c "import secrets; print(secrets.token_urlsafe(24))"`. |
 | `VDAGENT_BACKEND` | Hub address `host:port`, default `localhost:50050`. |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL` | Required. OpenAI-compatible endpoint with tool calling. |
 | `LLM_TIMEOUT_S` | Per LLM call, default 120. |

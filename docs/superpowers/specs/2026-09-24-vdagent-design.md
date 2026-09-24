@@ -33,7 +33,7 @@ multi-process / horizontally scaled BE, dataset garbage collection, SSE replay.
 | D9 | Backend DB and Warehouse DB are both **SQLite**. |
 | D10 | No auth: users are picked in the UI and identified by `X-User-Id`. |
 | D11 | Compaction trigger: **task boundary** (lazily, when an agent next starts a turn). |
-| D12 | BE↔agent topology: **agents dial the BE**. Each agent process opens one long-lived bidirectional gRPC stream (a *session*) to the BE's agent hub (`agent_listen`, default `127.0.0.1:50050`), authenticated by a per-agent token, and reconnects when it drops. The BE multiplexes that agent's turns and compactions on the session by `ref` (invocation id / compaction id); agent→agent calls travel as frames of the caller's turn. Healthy ⇔ an authenticated session is connected. The BE never opens connections to agents. |
+| D12 | BE↔agent topology: **agents dial the BE**. Each agent process opens one long-lived bidirectional gRPC stream (a *session*) to the BE's agent hub (`agent_listen`, default `127.0.0.1:50050`), identified by its name (no credential: demo), and reconnects when it drops. The BE multiplexes that agent's turns and compactions on the session by `ref` (invocation id / compaction id); agent→agent calls travel as frames of the caller's turn. Healthy ⇔ a session is connected. The BE never opens connections to agents. |
 | D13 | Agent processes are **pure `grpc.aio` clients** (no FastAPI, no listening port) — deviation from the original diagram, which showed FastAPI on each agent. |
 | D14 | Python side uses a **uv workspace**; FE is **React + Vite + TypeScript** managed with npm. |
 
@@ -235,11 +235,11 @@ Every status change publishes `invocation.updated` / `task.updated`; queue/busy 
 ### 4.3 Agent sessions and health
 
 - The BE runs the agent hub (`engine/hub.py`), a `grpc.aio` server on `agent_listen`. Each agent
-  dials it and opens `AgentHub.Connect`; the first uplink is `hello(agent, token, runtime)`. The hub
-  accepts only names listed in `config.yaml` whose token matches `VDAGENT_AGENT_TOKEN_<NAME>`
-  (`hmac.compare_digest`), answers `welcome`, and otherwise ends the RPC `UNAUTHENTICATED`. An agent
-  without a configured token is logged at startup and can never connect.
-- **Healthy ⇔ an authenticated session is connected.** There is no polling; dead peers are detected
+  dials it and opens `AgentHub.Connect`; the first uplink is `hello(agent, runtime)`. The hub
+  accepts names listed in `config.yaml`, answers `welcome`, and otherwise ends the RPC
+  `UNAUTHENTICATED`. There is no credential (demo): anyone who can reach the hub can connect as any
+  listed agent, so `agent_listen` stays on a trusted network.
+- **Healthy ⇔ a session is connected.** There is no polling; dead peers are detected
   by gRPC keepalive (ping every 20 s, 10 s timeout). Health changes publish `agent.status` to every
   connected user.
 - A new session for a connected name **replaces** the old one (old RPC ends `ABORTED: replaced by a
@@ -339,13 +339,13 @@ package vdagent.v1;
 
 service AgentHub {
   // Opened by the agent. The first uplink message MUST be `hello`; the hub answers `welcome`
-  // or ends the RPC with UNAUTHENTICATED (unknown agent or bad token).
+  // or ends the RPC with UNAUTHENTICATED (unknown agent name).
   rpc Connect(stream AgentUplink) returns (stream HubDownlink);
 }
 
 message Hello {
   string agent = 1;      // name as listed in the Backend's config.yaml
-  string token = 2;      // VDAGENT_AGENT_TOKEN_<NAME>
+  reserved 2; reserved "token";  // removed: agent sessions carry no credential
   string runtime = 3;    // free-form, logged (e.g. "vdagent-template/2")
 }
 message Welcome {}
@@ -420,8 +420,8 @@ message CompactResponse { string summary = 1; }
 History messages sent in `InvokeStart` and `CompactRequest` have `role=USER` content already
 rendered as `[from: <sender>] <text>`.
 
-Session rules: the first uplink is `hello`; anything else, an unknown name or a wrong token ends the
-RPC `UNAUTHENTICATED` (detail names the reason, never the token). A replaced session ends `ABORTED`;
+Session rules: the first uplink is `hello`; anything else or an unknown name ends the RPC
+`UNAUTHENTICATED` (detail names the reason). A replaced session ends `ABORTED`;
 BE shutdown ends sessions `UNAVAILABLE`. Keepalive on both sides: ping every 20 s, 10 s timeout,
 pings allowed without active calls; the hub permits client pings every 10 s. Compaction:
 `compact` with `ref = cmp_<12 hex>`, answered by exactly one `compacted` or `failure` with that `ref`.
@@ -515,9 +515,8 @@ values parse as ISO dates), `y` quantitative, multiple `y` via `fold`; pie → `
 
 `python -m vdagent_<name>` (template entrypoint; see the agent-template spec §3–§4 for the
 transport contract every agent implements). Environment precedence: `agents/<name>/.env` >
-process env > repo-root `.env`. The host reads `VDAGENT_BACKEND` (hub address, default
-`localhost:50050`) and `VDAGENT_AGENT_TOKEN_<NAME>` (required; missing → exit 2 naming it; refused
-by the hub → exit 2), then dials the hub and reconnects with backoff (0.5 s doubling to 10 s,
+process env > the nearest `.env` above the agent folder. The host reads `VDAGENT_BACKEND` (hub
+address, default `localhost:50050`; refused by the hub → exit 2), then dials the hub and reconnects with backoff (0.5 s doubling to 10 s,
 ±20 % jitter, reset after a 30 s session). The LiteLLM agents read
 `OPENAI_API_KEY` (required), `OPENAI_BASE_URL` (required), `LLM_MODEL` (required; model name
 served by that endpoint, must support tool calling; one model shared by all five agents),
@@ -838,9 +837,9 @@ agents:
   insight:      {description: "Explains trends, anomalies and drivers."}
   report:       {description: "Builds formatted reports with charts."}
 ```
-The BE loads the repo-root `.env` first (process env wins; it holds only the agent tokens) and reads each agent's token from
-`VDAGENT_AGENT_TOKEN_<NAME>`. The `agents:` map is the allowlist, the peer roster and the MCP
-permission key. The MCP permission matrix (§6.1) lives in code next to the tool definitions.
+The BE loads its optional `backend/.env` first (nearest `.env` above the config file; process env
+wins), e.g. for `VDAGENT_*` overrides. The `agents:` map is the allowlist, the peer roster and the
+MCP permission key. The MCP permission matrix (§6.1) lives in code next to the tool definitions.
 
 Local run:
 ```
@@ -855,22 +854,23 @@ cd frontend && npm install && npm run dev
 Or with the root `Makefile`: `make reset-db`, `make backend`, one `make agent-<name>` per agent,
 in any order between backend and agents (agents retry). A remote agent: BE with
 `VDAGENT_AGENT_LISTEN=0.0.0.0:50050`, `VDAGENT_MCP_PUBLIC_URL=http://<be-host>:8000/mcp`,
-`make backend HOST=0.0.0.0`; on the agent machine `agents/<name>/.env` with `VDAGENT_BACKEND`, the
-token and LLM settings, then `make agent-<name>`. The hub has no TLS; tokens are the only gate.
+`make backend HOST=0.0.0.0`; on the agent machine `agents/<name>/.env` with `VDAGENT_BACKEND` and
+the LLM settings, then `make agent-<name>`. The hub has no TLS and no authentication (demo): expose
+it only on a trusted network.
 
 `docker-compose.yml`: `seed` (one-shot), `backend` (:8000, depends on seed; builds and serves the
 FE via a multi-stage build; hub on `0.0.0.0:50050`, exposed to the compose network only, via
 `config.compose.yaml`), five agent services from one Python image, each running
 `python -m vdagent_<name>` with `VDAGENT_BACKEND=backend:50050`; shared `./var` volume; the
-backend reads the root `.env` (tokens), each agent `env_file: agents/<name>/.env` (its token,
-`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`). `.dockerignore` excludes every `.env`.
+backend is configured by `config.compose.yaml` alone, each agent reads `env_file: agents/<name>/.env`
+(`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`). `.dockerignore` excludes every `.env`.
 
 ## 13. Testing
 
 No real LLM in automated tests.
 
-**Agent hub** (`tests/test_hub.py`, real `grpc.aio` hub with test-side sessions): unknown name,
-wrong token, missing BE token or non-`hello` first message → `UNAUTHENTICATED`; connect/disconnect
+**Agent hub** (`tests/test_hub.py`, real `grpc.aio` hub with test-side sessions): unknown name
+or non-`hello` first message → `UNAUTHENTICATED`; connect/disconnect
 → health and `on_change`; turns routed by `ref` with interleaved frames; session loss and
 replacement fail open turns; `cancel` sends `Cancel` and drops later uplink; `failure` →
 `AgentError`; compaction round trip, failure and timeout; unknown `ref` dropped.
@@ -894,14 +894,14 @@ per-agent `tools/list` filter and `tools/call` rejection; other-user dataset →
 
 **Agents** (see the agent-template spec §10): every agent folder's `tests/test_host.py` connects its
 host copy to a fake in-process hub (frame order, call routing, rules R2–R5, error mapping,
-compaction, hello/token, reconnect, cancel, startup errors, `.env` precedence). Each LiteLLM agent's `tests/test_agent.py` (scripted `LLMClient`, fake
+compaction, hello, reconnect, cancel, startup errors, `.env` precedence). Each LiteLLM agent's `tests/test_agent.py` (scripted `LLMClient`, fake
 MCP): terminates at `max_steps` with `tool_choice="none"` on the last step; concurrent
 `send_to_agent` calls each produce a `call` and consume the matching `call_result`; MCP results
 emitted as `message(tool)`; MCP error becomes tool content; `Compact` returns the summary.
 
 **Frontend**: `tsc --noEmit`, `vite build`, Vitest for `applyEvent` only.
 
-**E2E smoke** (manual, needs `.env` with the agent tokens, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`): in the browser pick Alice, ask the Orchestrator
+**E2E smoke** (manual, needs `agents/<name>/.env` with `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`): in the browser pick Alice, ask the Orchestrator
 "Compare revenue by region in 2025 vs 2024 and write a report"; expect a task tree
 Orchestrator → Data → Compare → Insight → Report, a saved report with at least one chart, and all
 five chats showing their part of the exchange.

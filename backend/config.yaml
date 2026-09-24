@@ -5,7 +5,7 @@ agent_listen: 127.0.0.1:50050                   # hub address; 0.0.0.0:50050 to 
 frontend_dist: ./frontend/dist                  # served at / if present
 max_depth: 4
 max_steps: 12
-# Agents dial the hub and authenticate with VDAGENT_AGENT_TOKEN_<NAME> (repo-root .env).
+# Agents dial the hub and identify themselves by name; only the names listed here are accepted.
 agents:
   orchestrator: {description: "Talks to the user, plans, delegates, writes final answers."}
   data:         {description: "Queries the warehouse; returns dataset ids."}

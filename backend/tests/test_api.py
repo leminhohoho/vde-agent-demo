@@ -19,12 +19,8 @@ B = {"X-User-Id": BOB}
 
 
 @pytest.fixture
-async def client(
-    tmp_path: Path, fake_agents: dict[str, FakeAgent], monkeypatch: pytest.MonkeyPatch
-) -> AsyncIterator[httpx.AsyncClient]:
+async def client(tmp_path: Path, fake_agents: dict[str, FakeAgent]) -> AsyncIterator[httpx.AsyncClient]:
     cfg = make_config(tmp_path, fake_agents)
-    for name, agent in fake_agents.items():
-        monkeypatch.setenv(f"VDAGENT_AGENT_TOKEN_{name.upper()}", agent.token)
     apply_schema(cfg.backend_db)
     seed_users(cfg.backend_db)
     app = create_app(cfg)

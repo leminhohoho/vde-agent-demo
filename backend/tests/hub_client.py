@@ -21,8 +21,8 @@ class HubClient:
         self.call: Any = agent_pb2_grpc.AgentHubStub(self.channel).Connect()
         self._write_lock = asyncio.Lock()  # grpc.aio allows one pending write per call
 
-    async def hello(self, agent: str, token: str) -> pb.HubDownlink:
-        await self.send("", hello=pb.Hello(agent=agent, token=token, runtime="test"))
+    async def hello(self, agent: str) -> pb.HubDownlink:
+        await self.send("", hello=pb.Hello(agent=agent, runtime="test"))
         return await self.recv()
 
     async def send(self, ref: str, **kind: Any) -> None:

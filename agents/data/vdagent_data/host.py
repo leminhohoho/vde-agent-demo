@@ -4,7 +4,8 @@ COPIED FROM `agents/_template/` — do not edit in an agent folder. Change the t
 
 The agent dials out; it needs no listening port. One session (a bidirectional stream) carries all
 of this agent's turns and compactions, multiplexed by `ref`. A lost session cancels its in-flight
-work and is re-opened with backoff; a refused session (`UNAUTHENTICATED`) ends the process.
+work and is re-opened with backoff; a refused session (`UNAUTHENTICATED`: the Backend does not list
+this agent's name) ends the process.
 """
 
 from __future__ import annotations
@@ -55,10 +56,6 @@ CHANNEL_OPTIONS = [
 
 class SessionRefusedError(Exception):
     """The Backend refused the session (`UNAUTHENTICATED`); retrying cannot help."""
-
-
-def token_env_var(name: str) -> str:
-    return f"VDAGENT_AGENT_TOKEN_{name.upper()}"
 
 
 def _find_timeout(exc: BaseException) -> AgentTimeoutError | None:
@@ -361,13 +358,13 @@ class _Session:
 
 
 async def _connect_once(
-    name: str, agent: Agent, backend: str, token: str, stop: asyncio.Event, on_connected: Callable[[], None]
+    name: str, agent: Agent, backend: str, stop: asyncio.Event, on_connected: Callable[[], None]
 ) -> None:
     """Open one session and serve it until `stop` (returns) or loss (raises)."""
     async with grpc.aio.insecure_channel(backend, options=CHANNEL_OPTIONS) as channel:
         call: Any = agent_pb2_grpc.AgentHubStub(channel).Connect()
         try:
-            await call.write(agent_pb2.AgentUplink(hello=agent_pb2.Hello(agent=name, token=token, runtime=RUNTIME)))
+            await call.write(agent_pb2.AgentUplink(hello=agent_pb2.Hello(agent=name, runtime=RUNTIME)))
             first = await call.read()
         except grpc.aio.AioRpcError as err:
             if err.code() == grpc.StatusCode.UNAUTHENTICATED:
@@ -383,17 +380,17 @@ async def _connect_once(
             call.cancel()
 
 
-async def run_agent(name: str, agent: Agent, backend: str, token: str, stop: asyncio.Event) -> None:
+async def run_agent(name: str, agent: Agent, backend: str, stop: asyncio.Event) -> None:
     """Keep a hub session open until `stop` is set, reconnecting with backoff.
 
-    Raises `SessionRefusedError` when the Backend refuses the session (unknown agent or bad token).
+    Raises `SessionRefusedError` when the Backend refuses the session (it does not list `name`).
     """
     loop = asyncio.get_running_loop()
     delay = BACKOFF_INITIAL_S
     while not stop.is_set():
         connected_at: list[float] = []
         try:
-            await _connect_once(name, agent, backend, token, stop, lambda: connected_at.append(loop.time()))
+            await _connect_once(name, agent, backend, stop, lambda: connected_at.append(loop.time()))
         except SessionRefusedError:
             raise
         except Exception as e:
@@ -444,12 +441,12 @@ def _exit_config_error(name: str, message: str) -> NoReturn:
     sys.exit(2)
 
 
-async def _run_until_signalled(name: str, agent: Agent, backend: str, token: str) -> None:
+async def _run_until_signalled(name: str, agent: Agent, backend: str) -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
-    await run_agent(name, agent, backend, token, stop)
+    await run_agent(name, agent, backend, stop)
     logger.info("agent %s shut down", name)
 
 
@@ -458,14 +455,11 @@ def main(name: str, build_agent: Callable[[], Agent]) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     load_env_files()
     backend = os.environ.get("VDAGENT_BACKEND", "").strip() or DEFAULT_BACKEND
-    token = os.environ.get(token_env_var(name), "").strip()
-    if not token:
-        _exit_config_error(name, f"missing required environment variable {token_env_var(name)}")
     try:
         agent = build_agent()
     except AgentConfigError as exc:
         _exit_config_error(name, str(exc))
     try:
-        asyncio.run(_run_until_signalled(name, agent, backend, token))
+        asyncio.run(_run_until_signalled(name, agent, backend))
     except SessionRefusedError as exc:
         _exit_config_error(name, f"the Backend at {backend} refused the session: {exc}")

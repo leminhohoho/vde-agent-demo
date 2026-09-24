@@ -15,7 +15,6 @@ from vdagent_backend.engine.hub import AgentError, AgentHub, TurnChannel
 from vdagent_proto import agent_pb2 as pb
 
 AGENTS = {n: AgentSpec(n, f"{n} agent") for n in ("data", "compare", "report")}
-TOKENS = {"data": "tok-data", "compare": "tok-compare"}  # report has no token: it can never connect
 WAIT_S = 5.0
 
 
@@ -33,14 +32,14 @@ class Hub:
 
     async def connect(self, agent: str = "data") -> HubClient:
         c = self.client()
-        welcome = await c.hello(agent, TOKENS[agent])
+        welcome = await c.hello(agent)
         assert welcome.WhichOneof("kind") == "welcome"
         return c
 
 
 @pytest.fixture
 async def hub() -> AsyncIterator[Hub]:
-    h = AgentHub(AGENTS, TOKENS, compact_timeout_s=0.3)
+    h = AgentHub(AGENTS, compact_timeout_s=0.3)
     state = Hub(h, 0)
     state.port = await h.start("127.0.0.1:0", lambda agent, healthy: state.changes.append((agent, healthy)))
     yield state
@@ -75,19 +74,17 @@ async def read(turn: TurnChannel) -> pb.AgentFrame:
 @pytest.mark.parametrize(
     ("first", "reason"),
     [
-        (pb.AgentUplink(hello=pb.Hello(agent="nobody", token="tok-data")), "unknown agent 'nobody'"),
-        (pb.AgentUplink(hello=pb.Hello(agent="data", token="wrong")), "bad token for agent 'data'"),
-        (pb.AgentUplink(hello=pb.Hello(agent="report", token="")), "no token is configured for agent 'report'"),
+        (pb.AgentUplink(hello=pb.Hello(agent="nobody")), "unknown agent 'nobody'"),
         (pb.AgentUplink(ref="inv_1", frame=assistant("hi")), "the first message must be hello"),
     ],
-    ids=["unknown-name", "wrong-token", "no-token-configured", "not-hello"],
+    ids=["unknown-name", "not-hello"],
 )
 async def test_session_is_refused_unauthenticated(hub: Hub, first: pb.AgentUplink, reason: str) -> None:
     c = hub.client()
     await c.call.write(first)
     code, details = await c.status()
     assert code == grpc.StatusCode.UNAUTHENTICATED
-    assert reason in details and "tok-data" not in details
+    assert reason in details
     assert not any(hub.hub.is_healthy(a) for a in AGENTS)
     assert hub.changes == []
 
@@ -272,7 +269,7 @@ async def test_compact_fails_when_the_agent_is_not_connected_or_disconnects(hub:
 
 
 async def test_start_fails_naming_an_address_it_cannot_bind(hub: Hub) -> None:
-    other = AgentHub(AGENTS, TOKENS)
+    other = AgentHub(AGENTS)
     with pytest.raises(RuntimeError, match=f"127.0.0.1:{hub.port}"):
         await other.start(f"127.0.0.1:{hub.port}", lambda a, h: None)
     await other.close()

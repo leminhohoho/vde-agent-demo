@@ -4,6 +4,12 @@ Status: draft for review · Date: 2026-09-24
 Amends: `2026-09-24-vdagent-design.md` (D12, §2, §4.1, §4.3, §4.4, §4.6, §5, §7.1, §12, §13) and
 `2026-09-24-agent-template-design.md` (T7, §3, §4, §9, §10).
 
+> **Later change — tokens removed (demo).** C4 and the token half of C12 were withdrawn after
+> implementation: `Hello` carries no token (field 2 reserved), the hub accepts any name listed in
+> `config.yaml`, there is no `VDAGENT_AGENT_TOKEN_*` variable, and the Backend's optional `.env` is
+> `backend/.env`. Everything below that mentions tokens describes the withdrawn design; the main and
+> template specs describe the current one. Keep the hub on a trusted network.
+
 ## 1. Purpose and scope
 
 Today every agent is a gRPC **server** and the Backend dials it at a configured `host:port`

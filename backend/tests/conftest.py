@@ -123,14 +123,10 @@ class FakeAgent:
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
     _turn_tasks: dict[str, asyncio.Task[None]] = field(default_factory=dict)
 
-    @property
-    def token(self) -> str:
-        return f"tok-{self.name}"
-
     async def connect(self, hub: AgentHub) -> None:
         assert hub.port is not None
         self.hub, self.client = hub, HubClient(hub.port)
-        welcome = await self.client.hello(self.name, self.token)
+        welcome = await self.client.hello(self.name)
         assert welcome.WhichOneof("kind") == "welcome", welcome
         self._spawn(self._loop())
 
@@ -287,7 +283,7 @@ async def harness(tmp_path: Path, fake_agents: dict[str, FakeAgent], cfg_overrid
     db = create_db(cfg.backend_db)
     seed_users(cfg.backend_db)
     bus, tokens = EventBus(), TokenRegistry()
-    hub = AgentHub(cfg.agents, {n: a.token for n, a in fake_agents.items()})
+    hub = AgentHub(cfg.agents)
     engine = Engine(cfg, db, bus, tokens, hub)
     await engine.start()
     await connect_all(fake_agents, hub)

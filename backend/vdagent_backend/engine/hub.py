@@ -1,8 +1,9 @@
 """Agent hub (§4.3): agents dial the Backend; each keeps one `AgentHub.Connect` session open.
 
-The hub is a `grpc.aio` server on `agent_listen`. A session starts with `hello` (agent name +
-token, checked against `config.yaml` and `VDAGENT_AGENT_TOKEN_<NAME>`); the hub answers `welcome`
-or ends the RPC with `UNAUTHENTICATED`. An agent is healthy iff it has an authenticated session.
+The hub is a `grpc.aio` server on `agent_listen`. A session starts with `hello` naming the agent;
+the hub answers `welcome` if the name is listed in `config.yaml`, else it ends the RPC with
+`UNAUTHENTICATED`. There is no credential: anyone who can reach the hub can connect as any listed
+agent, so keep `agent_listen` on a trusted network. An agent is healthy iff it has a session.
 A new session for a connected name replaces the old one (`ABORTED`), without an unhealthy event.
 
 Turns and compactions are multiplexed on the session by `ref`: the invocation id for a turn, a
@@ -14,7 +15,6 @@ is dropped with a warning. Construct and use inside the running event loop.
 from __future__ import annotations
 
 import asyncio
-import hmac
 import logging
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -153,11 +153,8 @@ class _Servicer(agent_pb2_grpc.AgentHubServicer):
 
 
 class AgentHub:
-    def __init__(
-        self, agents: Mapping[str, AgentSpec], tokens: Mapping[str, str], *, compact_timeout_s: float = COMPACT_TIMEOUT_S
-    ) -> None:
+    def __init__(self, agents: Mapping[str, AgentSpec], *, compact_timeout_s: float = COMPACT_TIMEOUT_S) -> None:
         self._agents = dict(agents)
-        self._tokens = dict(tokens)
         self._compact_timeout_s = compact_timeout_s
         self._sessions: dict[str, _Session] = {}
         self._server: grpc.aio.Server | None = None
@@ -255,11 +252,6 @@ class AgentHub:
         name = hello.agent
         if name not in self._agents:
             await self._refuse(context, f"unknown agent '{name}'")
-        expected = self._tokens.get(name)
-        if not expected:
-            await self._refuse(context, f"no token is configured for agent '{name}' on the Backend")
-        if not hmac.compare_digest(hello.token.encode(), expected.encode()):  # pyright: ignore[reportOptionalMemberAccess]
-            await self._refuse(context, f"bad token for agent '{name}'")
         if self._closing:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "backend shutting down")
 

@@ -5,9 +5,10 @@ Backend↔agent protocol; you write the **brain** with whatever you like — pla
 LangChain/LangGraph, the OpenAI Agents SDK.
 
 An agent dials the Backend: it opens one long-lived session to the Backend's agent hub
-(`VDAGENT_BACKEND`, default `localhost:50050`), authenticates with `VDAGENT_AGENT_TOKEN_<NAME>`,
-and serves every turn and compaction the Backend sends over it. It needs no listening port, so it
-can run on any machine that reaches the Backend.
+(`VDAGENT_BACKEND`, default `localhost:50050`), identifies itself by `NAME`, and serves every turn
+and compaction the Backend sends over it. It needs no listening port, so it can run on any machine
+that reaches the Backend. There is no credential (demo): the Backend accepts any name listed in
+`backend/config.yaml`.
 
 Design: [`docs/superpowers/specs/2026-09-24-agent-template-design.md`](../../docs/superpowers/specs/2026-09-24-agent-template-design.md),
 amended by [`2026-09-24-agent-connect-direction-design.md`](../../docs/superpowers/specs/2026-09-24-agent-connect-direction-design.md).
@@ -53,25 +54,22 @@ agent keeps no state between turns.
    `backend/config.yaml` and `backend/config.compose.yaml`, a service in `docker-compose.yml`
    (`<<: *agent`, `command: ["python", "-m", "vdagent_<name>"]`), and `<name>` in `AGENTS` in the
    root `Makefile`.
-7. Generate a token (`python -c "import secrets; print(secrets.token_urlsafe(24))"`) and put it in
-   two places: `VDAGENT_AGENT_TOKEN_<NAME>=…` in the repo-root `.env` (read by the Backend; restart
-   it to pick the token up) and in a new `agents/<name>/.env`, together with
-   `VDAGENT_BACKEND=localhost:50050` and the brain's settings (e.g. the LLM endpoint). In
-   `docker-compose.yml`, give the service `env_file: agents/<name>/.env`.
+7. Create `agents/<name>/.env` with `VDAGENT_BACKEND=localhost:50050` and the brain's settings
+   (e.g. the LLM endpoint). In `docker-compose.yml`, give the service
+   `env_file: agents/<name>/.env`.
 8. Grant MCP tools in `backend/vdagent_backend/mcp/tools.py` (`ALL_AGENTS` and `PERMISSIONS`).
 9. `uv run pytest agents/<name>`, then `make agent-<name>`.
 
 ## Configuration
 
 Each agent is configured by its own `agents/<name>/.env` (gitignored; it never enters Docker
-images). Precedence, highest first: `agents/<name>/.env`, the process environment, the repo-root
-`.env` (which holds the Backend's tokens and only fills variables still unset).
+images). Precedence, highest first: `agents/<name>/.env`, the process environment, the nearest
+`.env` above the agent folder (optional; only fills variables still unset).
 `make agent-<name>` runs the agent from its folder (`cd agents/<name> && uv run python -m vdagent_<name>`).
 
 | Variable | |
 |---|---|
-| `VDAGENT_AGENT_TOKEN_<NAME>` | Required; missing → exit 2 naming the variable. A refused token or unknown name → exit 2. |
-| `VDAGENT_BACKEND` | Hub address `host:port`, default `localhost:50050`. |
+| `VDAGENT_BACKEND` | Hub address `host:port`, default `localhost:50050`. If the Backend does not list this agent's name, the session is refused and the process exits 2. |
 
 Losing the session (Backend restart, network) cancels the in-flight turns — your brain sees
 `asyncio.CancelledError` — and the host reconnects (0.5 s doubling to 10 s, ±20 % jitter).

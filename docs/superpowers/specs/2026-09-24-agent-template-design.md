@@ -35,7 +35,7 @@ only, §6); agent shutdown hooks.
 | T4 | **Framework openness via README recipes** (LangGraph, OpenAI Agents SDK), not a runnable example. |
 | T5 | **Callback-context API**: the developer implements `invoke(ctx)` and `compact(...)`; `ctx` offers `emit_assistant`, `emit_tool_result`, `call_agent`. No protobuf in developer code. |
 | T6 | **Host guards the protocol locally**: frame-ordering rules the Backend enforces (main spec §5.3) are checked in-process and raise `ContractViolation` at the offending call site. |
-| T7 | Entrypoint `python -m <package>`; `__main__.py` calls `host.main(NAME, build_agent)`, which **connects out** to the Backend's agent hub (`VDAGENT_BACKEND`) as `NAME` with token `VDAGENT_AGENT_TOKEN_<NAME>` and serves turns over that session. `AGENT_NAME` env var is removed; agents listen on no port. |
+| T7 | Entrypoint `python -m <package>`; `__main__.py` calls `host.main(NAME, build_agent)`, which **connects out** to the Backend's agent hub (`VDAGENT_BACKEND`) as `NAME` and serves turns over that session. `AGENT_NAME` env var is removed; agents listen on no port. |
 | T8 | Registry (`backend/config.yaml`) and MCP permissions (`backend/.../mcp/tools.py` `PERMISSIONS`) stay in the Backend. |
 | T9 | The template's only dependencies: `vdagent-proto`, `grpcio`, `python-dotenv`. No LLM, framework, or MCP client. |
 | T10 | Agents may run **local tools** in-process; they must still be emitted (§6). |
@@ -101,13 +101,13 @@ agents/orchestrator/
         └── test_agent.py          # LiteLLM loop tests (ported from agents/tests/test_agent_runtime.py)
 ```
 
-| Agent | Package | Token variable | Prompt source |
-|---|---|---|---|
-| orchestrator | `vdagent_orchestrator` | `VDAGENT_AGENT_TOKEN_ORCHESTRATOR` | `prompts/orchestrator.md` |
-| data | `vdagent_data` | `VDAGENT_AGENT_TOKEN_DATA` | `prompts/data.md` |
-| compare | `vdagent_compare` | `VDAGENT_AGENT_TOKEN_COMPARE` | `prompts/compare.md` |
-| insight | `vdagent_insight` | `VDAGENT_AGENT_TOKEN_INSIGHT` | `prompts/insight.md` |
-| report | `vdagent_report` | `VDAGENT_AGENT_TOKEN_REPORT` | `prompts/report.md` |
+| Agent | Package | Prompt source |
+|---|---|---|
+| orchestrator | `vdagent_orchestrator` | `prompts/orchestrator.md` |
+| data | `vdagent_data` | `prompts/data.md` |
+| compare | `vdagent_compare` | `prompts/compare.md` |
+| insight | `vdagent_insight` | `prompts/insight.md` |
+| report | `vdagent_report` | `prompts/report.md` |
 
 ### 2.3 Migration map (old → new, per LiteLLM agent)
 
@@ -198,7 +198,7 @@ this.
 
 ## 4. Host (`host.py`)
 
-Public surface: `main(name, build_agent)`, `run_agent(name, agent, backend, token, stop)` (the
+Public surface: `main(name, build_agent)`, `run_agent(name, agent, backend, stop)` (the
 session loop; used by tests), `load_env_files(agent_dir=None)`. Everything else is private.
 
 ### 4.1 `main(name, build_agent)`
@@ -207,11 +207,10 @@ session loop; used by tests), `load_env_files(agent_dir=None)`. Everything else 
 2. `load_env_files()`: `agents/<name>/.env` (the folder holding `pyproject.toml`) with
    `override=True`, then the nearest `.env` above that folder (else `find_dotenv(usecwd=True)`) with
    `override=False`. Precedence: agent `.env` > process env > root `.env`.
-3. `VDAGENT_BACKEND` (default `localhost:50050`); `VDAGENT_AGENT_TOKEN_<NAME>` required — missing →
-   stderr `"<name>: missing required environment variable VDAGENT_AGENT_TOKEN_<NAME>"`, exit 2.
+3. `VDAGENT_BACKEND` (default `localhost:50050`).
 4. `agent = build_agent()`; `AgentConfigError` → stderr `"<name>: <message>"`, exit 2.
 5. `run_agent(...)` until SIGINT/SIGTERM: open `AgentHub.Connect` (keepalive 20 s / 10 s, pings
-   without calls), send `hello(name, token, runtime)`, wait for `welcome`, log
+   without calls), send `hello(name, runtime)`, wait for `welcome`, log
    `"agent <name> connected to <backend>"`, serve the session. `UNAUTHENTICATED` → stderr with the
    detail, exit 2. Any other failure or loss → cancel the session's in-flight turns and
    compactions, log, wait (0.5 s doubling to 10 s, ±20 % jitter, reset after a session lasted
@@ -268,8 +267,8 @@ def build_agent() -> Agent:
     return EchoAgent()
 ```
 
-Runnable with `uv run python -m agent_template` once `echo` is listed in `backend/config.yaml` and
-`VDAGENT_AGENT_TOKEN_ECHO` is set for both sides; a human message then comes back as
+Runnable with `uv run python -m agent_template` once `echo` is listed in `backend/config.yaml`; a
+human message then comes back as
 `echo: [from: user] …`.
 
 ## 6. Tools
@@ -324,7 +323,7 @@ Sections:
    dependency, and source to the root `pyproject.toml` and the folder to pyright `extraPaths`; add
    the `COPY agents/<name>/pyproject.toml` line to `Dockerfile.python`; register in
    `backend/config.yaml`, `backend/config.compose.yaml`, and `docker-compose.yml`; add the name to
-   `AGENTS` in the root `Makefile` (§9.1) and `VDAGENT_AGENT_TOKEN_<NAME>` to the root `.env`; grant MCP tools in
+   `AGENTS` in the root `Makefile` (§9.1); create `agents/<name>/.env` from `.env.example`; grant MCP tools in
    `PERMISSIONS`; implement `agent.py`; run `uv run pytest agents/<name>`.
 3. **The contract** — §3 types and rules R1–R9, the turn lifecycle diagram.
 4. **Tools** — §6.
@@ -352,9 +351,9 @@ Sections:
   per agent folder (incl. `_template`) before the dependency sync; `COPY agents/ agents/` stays.
 - `docker-compose.yml`: drop the shared `command` from `x-agent`; each agent service sets
   `command: ["python", "-m", "vdagent_<name>"]`; remove `AGENT_NAME`. Agent services set
-  `VDAGENT_BACKEND: backend:50050`, `env_file: agents/<name>/.env` (its token + LLM settings),
-  `depends_on: backend`; the backend service `expose`s 50050 (not published) and reads the root
-  `.env` (tokens). `config.compose.yaml`:
+  `VDAGENT_BACKEND: backend:50050`, `env_file: agents/<name>/.env` (LLM settings),
+  `depends_on: backend`; the backend service `expose`s 50050 (not published) and is configured by
+  `config.compose.yaml` alone:
   `agent_listen: 0.0.0.0:50050`, agents without addresses. `.dockerignore` excludes `**/.env`.
 - Local run: `make backend`, one `make agent-<name>` per agent (§9.1).
 
@@ -412,9 +411,9 @@ with the matching `VDAGENT_BACKEND_DB` / `VDAGENT_WAREHOUSE_DB` when starting it
 New file (none exists today). Sections:
 1. **What this is** — one paragraph; links to the main spec, this spec, and
    `agents/_template/README.md`.
-2. **Prerequisites** — uv, Python 3.12, Node 22 (frontend); repo-root `.env` with
-   the agent tokens (Backend), and per agent `agents/<name>/.env` with `VDAGENT_BACKEND`, its token,
-   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL`; first-time `uv sync` and
+2. **Prerequisites** — uv, Python 3.12, Node 22 (frontend); per agent `agents/<name>/.env` with
+   `VDAGENT_BACKEND`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL` (optional `backend/.env` for
+   Backend overrides); first-time `uv sync` and
    `uv run python proto/scripts/gen.py`.
 3. **Makefile usage** — the §9.1 target table, plus the typical local session:
    ```
@@ -426,7 +425,7 @@ New file (none exists today). Sections:
    and the note that `reset-db` requires the backend and agents to be stopped.
 4. **Remote agent** — Backend with `VDAGENT_AGENT_LISTEN=0.0.0.0:50050`, `make backend HOST=0.0.0.0`,
    `VDAGENT_MCP_PUBLIC_URL` set to its LAN address; on the agent machine `agents/<name>/.env` with
-   `VDAGENT_BACKEND`, the token and LLM settings, then `make agent-<name>`.
+   `VDAGENT_BACKEND` and LLM settings, then `make agent-<name>`.
 5. **Docker** — `docker compose up --build`, then http://localhost:8000.
 6. **Tests** — `uv run pytest`; `uv run pytest agents/<name>` for one agent.
 
@@ -455,10 +454,8 @@ code and details, so each LiteLLM agent's `test_agent.py` is unchanged.
 - `AgentTimeoutError` (plain and inside an exception group) → `DEADLINE_EXCEEDED`; other
   exception → `INTERNAL`.
 - `Compact` returns the brain's summary; timeout mapping.
-- The host sends `hello` with its name and token; started before the hub, it connects once the hub
-  is up.
-- `main`: `AgentConfigError`, a missing token (message names the variable), and `UNAUTHENTICATED`
-  exit 2.
+- The host sends `hello` with its name; started before the hub, it connects once the hub is up.
+- `main`: `AgentConfigError` and `UNAUTHENTICATED` (unknown name) exit 2.
 - `.env`: the agent `.env` beats the process env; the root `.env` fills the gaps.
 
 **`test_agent.py`** (template): the echo stub's reply and compact output.
@@ -487,7 +484,7 @@ In `2026-09-24-vdagent-design.md`:
 
 - `uv sync` succeeds; `uv run pytest` passes (backend + all six agent packages).
 - No reference to `vdagent_agents`, `vdagent-agents`, or `AGENT_NAME` remains outside git history.
-- `uv run python -m agent_template` connects once registered (config entry + token); a human
+- `uv run python -m agent_template` connects once registered (config entry); a human
   message returns `echo: …` in the UI.
 - `docker compose up --build` starts all services healthy; the main spec §13 E2E smoke passes
   (Orchestrator → Data → Compare → Insight → Report, saved report with a chart).

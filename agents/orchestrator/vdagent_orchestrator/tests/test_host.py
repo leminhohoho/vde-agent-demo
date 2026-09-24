@@ -30,7 +30,6 @@ from ..host import load_env_files, main, run_agent
 Brain = Callable[[InvocationContext], Awaitable[None]]
 
 NAME = "echo"
-TOKEN = "tok-echo"
 WAIT_S = 5.0
 
 
@@ -124,7 +123,7 @@ class HubSession:
 
 
 class FakeHub(agent_pb2_grpc.AgentHubServicer):
-    """Accepts sessions whose hello carries `TOKEN`; hands each one to the test."""
+    """Accepts every session; hands each one to the test."""
 
     def __init__(self) -> None:
         self.hellos: list[agent_pb2.Hello] = []
@@ -134,8 +133,6 @@ class FakeHub(agent_pb2_grpc.AgentHubServicer):
     async def Connect(self, request_iterator: Any, context: grpc.aio.ServicerContext) -> None:  # noqa: N802
         first = await context.read()
         self.hellos.append(first.hello)
-        if first.hello.token != TOKEN:
-            await context.abort(grpc.StatusCode.UNAUTHENTICATED, f"bad token for agent '{first.hello.agent}'")
         await context.write(agent_pb2.HubDownlink(welcome=agent_pb2.Welcome()))
         session = HubSession(context)
         self._sessions.put_nowait(session)
@@ -159,7 +156,7 @@ async def connected_host(agent: Any) -> AsyncIterator[tuple[FakeHub, HubSession]
     """Run the host for `agent` against a fresh fake hub; yields the hub and the first session."""
     hub, port = await start_hub()
     stop = asyncio.Event()
-    runner = asyncio.create_task(run_agent(NAME, agent, f"127.0.0.1:{port}", TOKEN, stop))
+    runner = asyncio.create_task(run_agent(NAME, agent, f"127.0.0.1:{port}", stop))
     try:
         yield hub, await hub.next_session()
     finally:
@@ -738,10 +735,10 @@ async def test_compact_failures_map_to_grpc_status(failure: Exception, status: g
 # ---------------------------------------------------------------- process
 
 
-async def test_host_says_hello_with_its_name_and_token():
+async def test_host_says_hello_with_its_name():
     async with connected_host(FnAgent(unused)) as (hub, _):
         (hello,) = hub.hellos
-    assert (hello.agent, hello.token) == (NAME, TOKEN)
+    assert hello.agent == NAME
     assert hello.runtime
 
 
@@ -754,7 +751,7 @@ def _free_port() -> int:
 async def test_host_started_before_the_hub_connects_once_it_is_up():
     port = _free_port()
     stop = asyncio.Event()
-    runner = asyncio.create_task(run_agent(NAME, FnAgent(unused), f"127.0.0.1:{port}", TOKEN, stop))
+    runner = asyncio.create_task(run_agent(NAME, FnAgent(unused), f"127.0.0.1:{port}", stop))
     await asyncio.sleep(0.3)  # at least one refused attempt
     hub, _ = await start_hub(port)
     try:
@@ -770,7 +767,6 @@ async def test_host_started_before_the_hub_connects_once_it_is_up():
 def main_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     """`main` without real `.env` files: env loading has its own test."""
     monkeypatch.setattr(host, "load_env_files", lambda: None)
-    monkeypatch.setenv("VDAGENT_AGENT_TOKEN_ECHO", TOKEN)
     return monkeypatch
 
 
@@ -784,25 +780,10 @@ def test_main_exits_2_naming_the_config_problem(main_env: pytest.MonkeyPatch, ca
     assert "echo: missing required environment variable LLM_MODEL" in capsys.readouterr().err
 
 
-def test_main_exits_2_naming_a_missing_token(main_env: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
-    built: list[bool] = []
-
-    def build_agent() -> Any:
-        built.append(True)
-        return FnAgent(unused)
-
-    main_env.delenv("VDAGENT_AGENT_TOKEN_ECHO")
-    with pytest.raises(SystemExit) as exit_info:
-        main(NAME, build_agent)
-    assert exit_info.value.code == 2
-    assert "echo: missing required environment variable VDAGENT_AGENT_TOKEN_ECHO" in capsys.readouterr().err
-    assert built == []
-
-
 class _RefusingHub(agent_pb2_grpc.AgentHubServicer):
     def Connect(self, request_iterator: Any, context: grpc.ServicerContext) -> Any:  # noqa: N802
         next(request_iterator)
-        context.abort(grpc.StatusCode.UNAUTHENTICATED, "bad token for agent 'echo'")
+        context.abort(grpc.StatusCode.UNAUTHENTICATED, "unknown agent 'echo'")
 
 
 def test_main_exits_2_when_the_backend_refuses_the_session(
@@ -819,7 +800,7 @@ def test_main_exits_2_when_the_backend_refuses_the_session(
     finally:
         server.stop(None)
     assert exit_info.value.code == 2
-    assert "bad token for agent 'echo'" in capsys.readouterr().err
+    assert "unknown agent 'echo'" in capsys.readouterr().err
 
 
 def test_agent_env_file_beats_process_env_and_root_env_fills_the_gaps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

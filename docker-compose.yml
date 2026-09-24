@@ -1,7 +1,7 @@
 # vdagent PoC (spec §12). `docker compose up --build`, then open http://localhost:8000.
-# `.env` in the repo root holds the Backend's agent tokens (VDAGENT_AGENT_TOKEN_<NAME>); each
-# `agents/<name>/.env` holds that agent's token and LLM settings (OPENAI_API_KEY, OPENAI_BASE_URL,
-# LLM_MODEL). Agents dial the backend's hub at backend:50050 (`environment` wins over `env_file`).
+# Each `agents/<name>/.env` holds that agent's LLM settings (OPENAI_API_KEY, OPENAI_BASE_URL,
+# LLM_MODEL); agents dial the backend's hub at backend:50050 (`environment` wins over `env_file`).
+# The backend is configured by backend/config.compose.yaml alone (backend/.env is for local runs).
 
 x-python: &python
   build:
@@ -30,7 +30,6 @@ services:
   backend:
     <<: *python
     command: ["uvicorn", "vdagent_backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
-    env_file: .env
     environment:
       VDAGENT_CONFIG: /app/backend/config.compose.yaml
     ports:

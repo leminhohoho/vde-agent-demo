@@ -1,18 +1,16 @@
 """Backend configuration: `backend/config.yaml` + `VDAGENT_*` env overrides.
 
 - `VDAGENT_CONFIG` selects the YAML file (default: `backend/config.yaml` next to this package).
-- The repo-root `.env` (nearest walking up from the config file, else from the working directory)
-  is loaded first; the process environment wins over it.
+- The Backend's `.env` is loaded first: the nearest `.env` walking up from the config file — so
+  `backend/.env` for the default config — else one found from the working directory. The process
+  environment wins over it.
 - Scalar keys can be overridden by `VDAGENT_<KEY>` (e.g. `VDAGENT_BACKEND_DB`, `VDAGENT_AGENT_LISTEN`).
-- Agent tokens come from `VDAGENT_AGENT_TOKEN_<NAME>` (`tokens_from_env`).
 - Relative paths are resolved against the current working directory.
 """
 
 from __future__ import annotations
 
-import logging
 import os
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,8 +18,6 @@ import yaml
 from dotenv import find_dotenv, load_dotenv
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -55,22 +51,6 @@ _SCALARS: dict[str, type] = {
     "max_depth": int,
     "max_steps": int,
 }
-
-
-def token_env_var(agent: str) -> str:
-    return f"VDAGENT_AGENT_TOKEN_{agent.upper()}"
-
-
-def tokens_from_env(agents: Mapping[str, AgentSpec]) -> dict[str, str]:
-    """Each agent's session token; agents without one are logged and can never connect."""
-    tokens: dict[str, str] = {}
-    for name in agents:
-        token = os.environ.get(token_env_var(name), "").strip()
-        if token:
-            tokens[name] = token
-        else:
-            log.warning("agent %s has no token (%s is unset); it cannot connect", name, token_env_var(name))
-    return tokens
 
 
 def _load_env_file(cfg_path: Path) -> None:

@@ -25,7 +25,7 @@ from starlette.responses import Response
 from vdagent_backend.api import rest, sse
 from vdagent_backend.api.deps import Services
 from vdagent_backend.api.errors import error_response, install_error_handlers
-from vdagent_backend.config import Config, load_config, tokens_from_env
+from vdagent_backend.config import Config, load_config
 from vdagent_backend.db.database import create_db
 from vdagent_backend.engine import AgentHub, Engine
 from vdagent_backend.events import EventBus
@@ -42,7 +42,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        hub = AgentHub(cfg.agents, tokens_from_env(cfg.agents))
+        hub = AgentHub(cfg.agents)
         engine = Engine(cfg, db, bus, tokens, hub)
         app.state.services = Services(cfg=cfg, db=db, bus=bus, engine=engine)
         await engine.start()

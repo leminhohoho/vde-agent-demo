@@ -589,7 +589,7 @@ Mọi tên model, tham số và giá nằm trong file config có version, không
 
 ```yaml
 insight_llm_config:
-  version: "2026-09-29b"
+  version: "2026-09-29c"
   prompt_version: "insight-prompt-1.4.0"   # ghi cả trong prompts/*.md; đổi prompt → tăng (luật 12)
   primary:
     provider: gemini

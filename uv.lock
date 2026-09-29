@@ -1666,7 +1666,9 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-openai" },
     { name = "mcp" },
+    { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "vdagent-sdk" },
 ]
 
@@ -1675,7 +1677,9 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.4" },
     { name = "langchain-openai", specifier = ">=1.6" },
     { name = "mcp", specifier = ">=1.9" },
+    { name = "pydantic", specifier = ">=2.7" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "vdagent-sdk", editable = "sdk" },
 ]
 

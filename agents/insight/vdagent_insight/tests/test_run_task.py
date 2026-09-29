@@ -395,3 +395,18 @@ async def test_tc33_memory_failures_never_fail_the_task(tmp_path: Path) -> None:
     assert "INSIGHT_MEMORY_WRITE_FAILED" in events.names()
     assert events.of("INSIGHT_MEMORY_READ")["error_code"] == "E18"
     assert all(u.call_type != "MEMORY" for u in result.envelope.producer.llm_usage)
+
+
+async def test_tc32_stale_refs_are_dropped_and_the_result_is_as_without_memory(tmp_path: Path) -> None:
+    from ..memory import CtxMemory
+    from .test_memory import OLD, ListMemory, ref, remember
+
+    store = ListMemory()
+    request, reader = task(overdue_unit(), conversation_id="00000000-0000-4000-8000-0000000000c1")
+    await remember(store, [ref(1), ref(2), ref(3)], snapshot=OLD, scope=request.user_context.authorized_scope)
+    events = Events()
+    with_memory, _ = await run(tmp_path / "a", request, reader, memory=CtxMemory(store, LLM.memory, lambda: AS_OF), events=events)
+    without, _ = await run(tmp_path / "b", request, reader)
+    assert events.of("INSIGHT_MEMORY_READ")["stale_refs_dropped"] == 3
+    assert with_memory.envelope is not None and without.envelope is not None
+    assert with_memory.envelope.content_hash == without.envelope.content_hash

@@ -123,9 +123,7 @@ async def test_raw_outputs_are_kept_for_replay() -> None:
     ctx, cands = setting()
     d = draft("c1")
     result = await steps(ctx, cands, FakeLlmClient([FakeReply(d, usage())]))
-    assert [json.loads(r) for r in result.raw_outputs] == [
-        d | {"selected": [d["selected"][0] | {"limitation_text": None, "recommendation_text": None}]}
-    ]
+    assert [json.loads(r) for r in result.raw_outputs] == [d | {"selected": [d["selected"][0] | {"limitation_text": None}]}]
 
 
 async def test_braced_slot_names_are_normalised_counted_and_logged(caplog: pytest.LogCaptureFixture) -> None:

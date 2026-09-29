@@ -8,7 +8,7 @@ Pure. Numbers never come from the LLM (luật 1):
 - `render_template` is the fallback sentence of one candidate: the cause template for
   ROOT_CAUSE_SIGNAL (the peer-free variant when there are too few peers, D-71), else the
   template of its insight type. Candidate slot names are the template slot names by design.
-- `recommendation_text`: the config sentence of the cause, only when the candidate has an action.
+- `recommendation_text`: the config sentence of the candidate's action code (`action_texts`).
 
 A slot that cannot be resolved raises `RenderError`: the caller drops the item (or falls back).
 """
@@ -59,6 +59,12 @@ def _permit_status(candidate: InsightCandidate, cfg: SemanticConfig, view: Datas
     return None
 
 
+def labelled(slot: str, display: str, cfg: SemanticConfig) -> str:
+    """A number as the reader sees it: with its fixed label when the slot has one (`slot_labels`)."""
+    label = cfg.language.slot_labels.get(slot)
+    return label.replace("{value}", display) if label else display
+
+
 def label_for(slot: str, candidate: InsightCandidate, cfg: SemanticConfig, view: DatasetView) -> str | None:
     if slot not in cfg.language.label_slots:
         return None
@@ -69,6 +75,8 @@ def label_for(slot: str, candidate: InsightCandidate, cfg: SemanticConfig, view:
         return cfg.cause(code).cause_label_vi if code in cfg.allowed_cause_codes and code is not None else None
     if slot == "permit_status":
         return _permit_status(candidate, cfg, view)
+    if slot == "scope_noun":  # the level of the subject (= analysis_scope.level for scope-level insights)
+        return cfg.language.scope_nouns.get(candidate.level)
     if slot == "limitation":
         messages = [cfg.language.limitation_messages[f] for f in candidate.dq_flags if f in cfg.language.limitation_messages]
         return "; ".join(dict.fromkeys(messages)) or None
@@ -96,7 +104,7 @@ def bind_claim(
         if numeric is not None:
             bound = numeric.model_copy(update={"slot": name})
             bindings.append(bound)
-            texts[name] = bound.display
+            texts[name] = labelled(slot, bound.display, cfg)
             continue
         label = label_for(slot, candidate, cfg, view)
         if label is None:
@@ -125,7 +133,8 @@ def _fill(template: str, texts: Mapping[str, str], numeric: set[str]) -> str:
             if repeat:
                 pos += repeat.end()
     out.append(template[pos:])
-    return "".join(out)
+    text = "".join(out)
+    return text[:1].upper() + text[1:]  # a sentence may start with a slot ("{{cause_label}} …")
 
 
 def fallback_template(candidate: InsightCandidate, cfg: SemanticConfig) -> str:
@@ -150,4 +159,4 @@ def recommendation_text(candidate: InsightCandidate, cfg: SemanticConfig) -> str
     if candidate.action_code is None or candidate.cause_code not in cfg.allowed_cause_codes:
         return None
     assert candidate.cause_code is not None
-    return cfg.cause(candidate.cause_code).recommendation_text
+    return cfg.action_texts.get(candidate.action_code)

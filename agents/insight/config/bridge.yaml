@@ -21,6 +21,10 @@ insight_bridge_config:
       ZONE: [T3, T5, T7]
       PROJECT: [T3, T5, T7]
   name_prefixes: ["the "]  # "The Sapphire 1" is also matched as "Sapphire 1"
+  project_keywords: ["du an"]  # "dự án The Beverly" → the project, not the tower of the same name
   compat_role: SALES_MANAGER  # D-14: no project/zone access data yet → every project of the pack
+  # Limitations of the whole scope the reply always lists (data quality); other limitations are
+  # listed only when an insight shown in the reply carries them (P5).
+  scope_limitation_codes: [DQ_NOTE, DQ_WARN, DQ_DESCRIBE_ONLY, FIELD_EXCLUDED, MISSING_NOT_RANDOM, STALE_SNAPSHOT, PARTIAL_COVERAGE, LOW_COVERAGE, INSUFFICIENT_COVERAGE, DEADLINE_EXCEEDED]
   max_reply_chars: 6000  # D-11
   compact_max_chars: 2000  # D-18

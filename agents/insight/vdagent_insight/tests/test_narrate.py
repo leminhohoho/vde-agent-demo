@@ -33,7 +33,6 @@ def good_item(cid: str) -> dict[str, Any]:
         "candidate_ids": [cid],
         "template": "Căn {{unit}} đã tồn {{dom}}; có khả năng liên quan tới {{cause_label}}.",
         "slots": [{"slot": s, "ref": f"{cid}.{s}"} for s in ("unit", "dom", "cause_label")],
-        "recommendation_text": "Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung vị nhóm tương đồng.",
     }
 
 
@@ -46,7 +45,6 @@ def test_a_valid_draft_is_used_as_written_and_unselected_candidates_are_skipped(
     assert (
         item.claim.rendered_text == "Căn SAPPHIRE1-16.231 đã tồn 145 ngày; có khả năng liên quan tới giá cao hơn nhóm tương đồng."
     )
-    assert item.recommendation_text is not None and item.recommendation_text.startswith("Đề xuất")
     assert result.narrative_mode == "LLM" and result.violations == {}
     assert [(r.candidate_id, r.reason_code) for r in result.rejected] == [(second.candidate_id, "LLM_SKIPPED")]
 
@@ -56,7 +54,7 @@ def test_tc12_a_free_number_sends_only_that_item_to_template() -> None:
     first, second = cands
     bad = {**good_item(first.candidate_id), "template": "Căn {{unit}} cao hơn peer 20%, liên quan tới {{cause_label}}."}
     bad["slots"] = [{"slot": s, "ref": f"{first.candidate_id}.{s}"} for s in ("unit", "cause_label")]
-    good = good_item(second.candidate_id) | {"recommendation_text": None}
+    good = good_item(second.candidate_id)
     result = narrate(cands, draft(bad, good), ctx.cfg, ctx.view, ctx.request, max_items=12)
     assert [(i.candidate_ids[0], i.source) for i in result.items] == [
         (first.candidate_id, "TEMPLATE"),
@@ -82,7 +80,6 @@ def test_mixing_insight_types_or_reusing_a_candidate_is_rejected() -> None:
     (limitation,) = [c for c in t7_candidates(stale).candidates]
     mixed = good_item(first.candidate_id) | {
         "candidate_ids": [first.candidate_id, limitation.candidate_id],
-        "recommendation_text": None,
     }
     found = check_draft(
         draft(mixed, good_item(first.candidate_id)), {c.candidate_id: c for c in [*cands, limitation]}, ctx.cfg, ctx.request

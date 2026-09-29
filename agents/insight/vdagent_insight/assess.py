@@ -12,8 +12,9 @@ The LLM never assigns any of this. From the narrated items (narrate.py) and thei
 - KEY (5.2, D-28): ROOT_CAUSE_SIGNAL, CAUSE_DISTRIBUTION or a `significant` PATTERN, with evidence,
   both lineage branches, confidence ≠ LOW and no CONFLICT; at most `max_key_insights` (request
   constraint, else config). `eligible_for_conclusion` = KEY;
-- recommendation (BR-10, D-33): the validated model text, else the config sentence; only with an
-  action code, never for a metric lookup, and not when the user turned recommendations off;
+- recommendation (BR-10, D-33): always the config sentence of the action code (`action_texts`),
+  never model text; only with an action code, never for a metric lookup, and not when the user
+  turned recommendations off;
 - status (4.4): PARTIAL when the narration fell back to TEMPLATE, a candidate was rejected for
   missing evidence (E05/E06), a CONFLICT is open or an optional input is missing; INVALID when
   candidates existed but nothing could be rendered; otherwise VALID ("no overdue unit" is VALID).
@@ -127,7 +128,7 @@ def _recommendation(
         or cands[0].insight_type not in RECOMMENDABLE
     ):
         return None
-    text = item.recommendation_text or recommendation_text(actionable, ctx.cfg)
+    text = recommendation_text(actionable, ctx.cfg)
     if text is None or actionable.action_code is None:
         return None
     return Recommendation(action_code=actionable.action_code, text=text, is_suggestion=True, requires_human_approval=True)
@@ -194,9 +195,7 @@ def _explained_units(insights: list[Insight], by_id: dict[str, InsightCandidate]
     return explained & {u.unit.unit_id for u in overdue}
 
 
-def _limitations(
-    insights: list[Insight], by_id: dict[str, InsightCandidate], rejected: list[RejectedCandidate], ctx: CandidateContext
-) -> list[Limitation]:
+def _limitations(insights: list[Insight], by_id: dict[str, InsightCandidate], ctx: CandidateContext) -> list[Limitation]:
     messages = ctx.cfg.language.limitation_messages
     affected: dict[str, list[str]] = defaultdict(list)
     for ins in insights:
@@ -206,9 +205,8 @@ def _limitations(
         for flag in dict.fromkeys(f for c in cands for f in c.dq_flags):
             if flag in messages:
                 affected[flag].append(ins.insight_id)
-    for r in rejected:
-        if r.reason_code in messages:
-            affected[r.reason_code].append(r.candidate_id)
+    # Rejected candidates stay in `rejected_candidates` only: a limitation must belong to an insight
+    # the artifact states (P5 polish; scope DQ issues are DATA_LIMITATION insights themselves).
     return [
         Limitation(code=code, message=messages[code], affected=list(dict.fromkeys(ids))) for code, ids in sorted(affected.items())
     ]
@@ -262,7 +260,7 @@ def assess(
         insights=insights,
         rejected_candidates=all_rejected,
         chart_hints=hints,
-        limitations=_limitations(insights, by_id, all_rejected, ctx),
+        limitations=_limitations(insights, by_id, ctx),
     )
 
     flags = {f for c in candidates for f in c.dq_flags}

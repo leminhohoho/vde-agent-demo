@@ -38,6 +38,7 @@ from .export_reader import Catalog
 from .memory import CtxMemory
 from .runtime import InsightRuntime
 from .settings import CONFIG_DIR, ConfigError, SemanticConfig
+from .validation import scan_injection
 
 NAME = "insight"
 DESCRIPTION = (
@@ -69,9 +70,11 @@ class BridgeConfig(BaseModel):
     default_intent: Intent
     tasks: dict[Intent, dict[Literal["UNIT", "ZONE", "PROJECT"], list[TaskCode]]]
     name_prefixes: list[str]
+    project_keywords: list[str]
     compat_role: Literal["SALES_OPS", "SALES_MANAGER", "EVALUATOR"]
     max_reply_chars: int = Field(gt=0, le=MAX_REPLY_CHARS)
     compact_max_chars: int = Field(gt=0)
+    scope_limitation_codes: list[str] = []
 
 
 def load_bridge_config(path: Path = CONFIG_DIR / "bridge.yaml") -> BridgeConfig:
@@ -123,11 +126,12 @@ def parse_free_text(text: str, catalog: Catalog, cfg: SemanticConfig, bridge: Br
     codes = re.findall(cfg.language.unit_code_pattern, text.upper())
     units = list(dict.fromkeys(catalog.unit_by_code[c] for c in codes if c in catalog.unit_by_code))
     zones = [z for z in catalog.zones if any(_mentions(folded, a) for a in _aliases(z.zone_name, bridge.name_prefixes))]
-    projects = [p for p in catalog.projects if _mentions(folded, fold(p.project_name))]
+    projects = [p for p in catalog.projects if any(_mentions(folded, a) for a in _aliases(p.project_name, bridge.name_prefixes))]
+    project_first = bool(projects) and any(_mentions(folded, w) for w in bridge.project_keywords)
     if units:
         level, scope = "UNIT", AnalysisScope(level="UNIT", unit_ids=[u.unit_id for u in units])
         label = ", ".join(u.unit_code for u in units)
-    elif zones:
+    elif zones and not project_first:
         level, scope = "ZONE", AnalysisScope(level="ZONE", zone_ids=[z.zone_id for z in zones])
         label = ", ".join(z.zone_name for z in zones)
     elif projects:
@@ -159,7 +163,7 @@ def guidance(catalog: Catalog | None, reason: str) -> str:
         "- một căn theo mã: “Vì sao căn SAPPHIRE1-16.231 bán chậm?”"
         + (f" (mã khác trong dữ liệu, vd {example})" if example != "SAPPHIRE1-16.231" else ""),
         "- một tòa: “Vì sao tòa The Sapphire 1 có nhiều căn bán chậm?”",
-        "- một dự án: “Thống kê DOM trung bình theo hướng ban công của dự án Vinhomes Ocean Park”",
+        "- một dự án: “Thống kê DOM trung vị theo hướng ban công của dự án Vinhomes Ocean Park”",
     ]
     if zones:
         lines += [f"Tòa có trong dữ liệu: {zones}.", f"Dự án: {projects}."]
@@ -186,14 +190,22 @@ def _cut(text: str, n: int) -> str:
     return text if len(text) <= n else text[: max(n - 1, 0)] + "…"
 
 
-def render_reply(result: TaskResult, request: InsightTaskRequest, *, compat: bool, max_chars: int = MAX_REPLY_CHARS) -> str:
+def render_reply(
+    result: TaskResult,
+    request: InsightTaskRequest,
+    *,
+    compat: bool,
+    max_chars: int = MAX_REPLY_CHARS,
+    snapshot_date: str | None = None,
+    scope_codes: frozenset[str] = frozenset(),
+) -> str:
     env = result.envelope
     if env is None:
         return f"Insight không chạy được phân tích ({result.error_code}): {result.error_message}."
     p = env.payload
     cov = p.summary.coverage
     key = [i for i in p.insights if i.materiality == "KEY"]
-    shown = key or p.insights[:3]
+    shown = key or p.insights[:5]
     scope = request.analysis_scope
     ids = scope.unit_ids or scope.zone_ids or scope.project_ids
     if p.summary.narrative_mode == "LLM":
@@ -205,19 +217,23 @@ def render_reply(result: TaskResult, request: InsightTaskRequest, *, compat: boo
     cost = "không gọi LLM" if result.task_cost_usd is None else f"${result.task_cost_usd}"
     head = [
         f"**Insight {env.status}** · artifact `{env.artifact_id}`" + (" · kết quả đã có, dùng lại" if result.reused else ""),
-        f"Phạm vi: {scope.level} {', '.join(ids)} · snapshot {request.snapshot_id} · {cov.units_in_scope} căn, "
+        f"Phạm vi: {scope.level} {', '.join(ids)} · snapshot {request.snapshot_id}{_as_of_text(snapshot_date)} · "
+        f"{cov.units_in_scope} căn, "
         f"{cov.overdue_units} căn quá hạn, {cov.units_explained} căn có giải thích.",
         f"Diễn giải: {mode} · chi phí LLM: {cost} · {result.latency_ms} ms.",
     ]
     if compat:
         head.append(COMPAT_NOTE)
-    limits = [lim.message for lim in [*env.limitations, *p.limitations]][:5]
+    # Only what the reader can see: artifact-level limitations, data-quality limitations of the whole
+    # scope, and the limitations of the insights shown (P5).
+    scope_wide = [lim.message for lim in [*env.limitations, *p.limitations] if lim in env.limitations or lim.code in scope_codes]
+    limits = list(dict.fromkeys([*scope_wide, *(m for i in shown for m in i.limitations)]))[:5]
 
     def build(k: int, text_max: int) -> str:
         items = shown[:k]
         lines = [*head, "", "Điểm chính:" if key else "Kết quả:"]
         for n, ins in enumerate(items, start=1):
-            rec = f" → Đề xuất: {_cut(ins.recommendation.text, text_max)}" if ins.recommendation else ""
+            rec = f" → {_cut(ins.recommendation.text, text_max)}" if ins.recommendation else ""
             lines.append(f"{n}. {_cut(ins.claim.rendered_text, text_max)}{rec}")
         if len(items) < len(shown):
             lines.append(f"… và {len(shown) - len(items)} ý khác trong artifact.")
@@ -230,8 +246,7 @@ def render_reply(result: TaskResult, request: InsightTaskRequest, *, compat: boo
             "narrative_mode": p.summary.narrative_mode,
             "coverage": cov.model_dump(mode="json"),
             "insights": [
-                {**c, "rendered_text": _cut(c["rendered_text"], text_max)}
-                for c in (_compact_insight(i) for i in items if i in key)
+                {**c, "rendered_text": _cut(c["rendered_text"], text_max)} for c in (_compact_insight(i) for i in items)
             ],
             "truncated": len(items) < len(shown),
         }
@@ -243,6 +258,14 @@ def render_reply(result: TaskResult, request: InsightTaskRequest, *, compat: boo
             if len(reply) <= max_chars:
                 return reply
     return build(0, 100)[:max_chars]
+
+
+def _as_of_text(snapshot_date: str | None) -> str:
+    """ " (dữ liệu tính đến 30/06/2026)": the pack is a frozen snapshot (P4-5)."""
+    if not snapshot_date:
+        return ""
+    y, m, d = snapshot_date.split("-")
+    return f" (dữ liệu tính đến {d}/{m}/{y})"
 
 
 # ---- compact (D-18) ------------------------------------------------------------------------------------
@@ -339,6 +362,11 @@ class InsightAgent:
 
     async def answer(self, ctx: InvocationContext) -> str:
         text = _inbound(ctx)
+        if text and scan_injection([text], self._rt.reader.cfg):  # GR-05: stays data, logged, changes nothing
+            self._rt.events(
+                "INSIGHT_SECURITY_EVENT",
+                {"error_code": "E13", "source": "inbound", "invocation_id": ctx.invocation_id, "agent": "insight_agent"},
+            )
         raw = _json_text(text)
         compat = raw is None
         try:
@@ -366,7 +394,11 @@ class InsightAgent:
             return guidance(await self._rt.reader.catalog(), str(exc))
         memory = CtxMemory(ctx.memory, self._rt.llm.memory, self._rt.clock)
         result = await run_task(request, self._rt.deps(memory))
-        return render_reply(result, request, compat=compat, max_chars=self._cfg.max_reply_chars)
+        manifest = await self._rt.reader.manifest()
+        return render_reply(
+            result, request, compat=compat, max_chars=self._cfg.max_reply_chars, snapshot_date=manifest.snapshot_date,
+            scope_codes=frozenset(self._cfg.scope_limitation_codes),
+        )  # fmt: skip
 
     async def invoke(self, ctx: InvocationContext) -> None:
         try:

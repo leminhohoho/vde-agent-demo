@@ -25,8 +25,9 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import InsightCandidate, InsightTaskRequest, LlmInsightDraft, MemoryContext
+from ..render import labelled
 from ..settings import LlmConfig, SemanticConfig
-from ..validation import Violation
+from ..validation import Violation, hidden_peer_slots
 from .schema import provider_schema
 
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
@@ -68,6 +69,8 @@ def candidate_aliases(candidates: list[InsightCandidate]) -> dict[str, str]:
 
 def _label_slots(c: InsightCandidate, cfg: SemanticConfig) -> list[str]:
     slots = ["subject", *SUBJECT_SLOTS.get(c.subject.type, ())]
+    if c.level in cfg.language.scope_nouns:
+        slots.append("scope_noun")
     if c.cause_code in cfg.allowed_cause_codes:
         slots.append("cause_label")
     if c.cause_code == "LEGAL_PERMIT_BARRIER" and c.level == "PROJECT":
@@ -78,18 +81,19 @@ def _label_slots(c: InsightCandidate, cfg: SemanticConfig) -> list[str]:
 
 
 def _candidate(alias: str, c: InsightCandidate, cfg: SemanticConfig) -> dict[str, Any]:
+    hidden = hidden_peer_slots(c, cfg)  # never offered, so never written (PEER_HIDDEN, D-71)
+    slots = [s for s in c.slots if s not in hidden]
     return {
         "id": alias,
         "type": c.insight_type,
         "level": c.level,
         "subject": c.subject.label,
         "cause_code": c.cause_code,
-        "slots": {name: b.display for name, b in c.slots.items()},
-        "refs": [f"{alias}.{s}" for s in [*c.slots, *_label_slots(c, cfg)]],
+        "slots": {name: labelled(name, c.slots[name].display, cfg) for name in slots},
+        "refs": [f"{alias}.{s}" for s in [*slots, *_label_slots(c, cfg)]],
         "flags": c.dq_flags,
         "significant": c.significant,
         "confidence": c.confidence,
-        "action": c.action_code is not None,
     }
 
 

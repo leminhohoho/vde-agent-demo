@@ -45,7 +45,6 @@ def test_optional_fields_become_nullable_and_the_answer_still_validates() -> Non
                 "template": "Căn {{unit}}.",
                 "slots": [{"slot": "unit", "ref": "C1.unit"}],
                 "limitation_text": None,
-                "recommendation_text": None,
             }
         ],
         "skipped": [],

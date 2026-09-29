@@ -37,7 +37,7 @@ vdagent_insight/
   memory.py     InsightMemory, NoOpMemory, CtxMemory (ctx.memory)
   prompts/      system.md, repair.md
   tests/        test_*.py, builders.py, fixtures/tcNN/, fixtures/export_sample/
-scripts/ask.py  demo terminal qua bridge (không cần backend)   scripts/llm_probe.py  probe D-30
+scripts/ask.py  demo terminal qua bridge   scripts/tower_eval.py  đo tỷ lệ fallback cấp tòa (live)   scripts/llm_probe.py  probe D-30
 ```
 
 ## Lệnh (từ gốc repo)
@@ -46,8 +46,10 @@ scripts/ask.py  demo terminal qua bridge (không cần backend)   scripts/llm_pr
   `uv run --with basedpyright==1.40.1 python -m basedpyright agents/insight`
 - Demo: `uv run python agents/insight/scripts/ask.py "Vì sao tòa Sapphire 1 có nhiều căn bán chậm?"` (`--no-llm`, `--events`)
 
-## Giả định đang dùng (chi tiết: OPEN_QUESTIONS, mục Phase 4)
+## Giả định đang dùng (bảng "Cần chốt sau prototype" đầu OPEN_QUESTIONS; spec v2.1 ghi phần đã chốt)
 - Orchestrator gửi câu hỏi tự do → chế độ tương thích (P4-1) tới khi chốt D-10; JSON request vẫn được nhận.
-- Nguồn artifact: data pack `export/` qua `ExportArtifactReader` (D-77); `as_of` ghim theo snapshot (P4-5).
-- Mart có thêm cột `is_peer_sample_constrained`, `peer_count` (không có trong DW v3.1.0).
+- Nguồn artifact: data pack `export/` qua `ExportArtifactReader` (D-77); `as_of` ghim theo snapshot, câu trả lời ghi "dữ liệu tính đến …" (P4-5).
+- Prompt hiện tại `insight-prompt-1.5.0`; đổi câu chữ validator (config `language.*`) cũng phải chạy lại TC-01→33 và `scripts/tower_eval.py`.
+- LLM chỉ viết `template` (+ `limitation_text`): khuyến nghị (`action_texts`), nhãn của số (`slot_labels`) và loại phạm vi (`{{scope_noun}}`) đều do code sinh.
+- Mart của data pack có `is_peer_sample_constrained`, `peer_count` (D-03; không có trong DW v3.1.0).
 - `insight_templates` và `recommendation_text` là bản nháp, cần Sales Ops duyệt.

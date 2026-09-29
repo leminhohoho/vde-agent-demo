@@ -57,15 +57,14 @@ semantic_config:
     # priority of a candidate without severity_rank (spec 6.4); T7 is always kept, its value is assumed.
     priority_without_rank: {value: {T2: "0.5", T3: "0.5", T5: "0.3", T7: "0"}, status: PENDING, source: "spec 6.4 (T7 assumed)"}
 
-  # Spec 7.6. action_code follows DW 4.3; recommendation_text is our draft (Sales Ops to review).
+  # Spec 7.6. action_code follows DW 4.3; its recommendation sentence is in `action_texts` below.
   # required/supplementary_evidence: spec 6.2 minimum evidence per cause (every T1 claim also binds
   # {{dom}} from fact_unit_inventory_snapshot.unsold_days_dom). A field without `unit` is evidence only.
   causes:
     - cause_code: LEGAL_PERMIT_BARRIER
       cause_label_vi: "vướng mắc pháp lý / giấy phép bán hàng"
       action_code: EXPEDITE_LEGAL_PROCEDURES
-      template: "Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}} quá hạn."
-      recommendation_text: "Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý và bảo lãnh ngân hàng trước khi mở bán đại trà."
+      template: "{{scope_noun}} {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}}."
       required_evidence:
         - {slot: permit, table: dim_project_profile, field: is_sales_permit_issued}
         - {slot: guarantee, table: dim_project_profile, field: is_bank_guarantee_issued}
@@ -73,7 +72,6 @@ semantic_config:
       cause_label_vi: "khuyết điểm vật lý của căn"
       action_code: DEFECT_COMPENSATION_DISCOUNT
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (điểm phạt khuyết tật {{defect}}, giá so với nhóm tương đồng {{spread}})."
-      recommendation_text: "Đề xuất xem xét chính sách chiết khấu bù trừ cho khuyết điểm công năng của căn."
       required_evidence:
         - {slot: defect, table: dm_unit_friction_diagnostics, field: physical_defect_penalty, unit: SCORE}
         - {slot: spread, table: dm_unit_friction_diagnostics, field: price_spread_vs_peer_pct, unit: PCT, signed: true}
@@ -84,7 +82,6 @@ semantic_config:
       cause_label_vi: "hướng nắng gắt / nhiệt cao"
       action_code: INSULATION_INTERIOR_PACKAGE
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (điểm phạt nhiệt/hướng {{thermal}}, hỗ trợ lãi suất {{subsidy}})."
-      recommendation_text: "Đề xuất xem xét gói nội thất cách nhiệt kèm ưu đãi phí quản lý cho căn."
       required_evidence:
         - {slot: thermal, table: dm_unit_friction_diagnostics, field: thermal_view_penalty, unit: SCORE}
         - {slot: subsidy, table: fact_unit_inventory_snapshot, field: subsidy_duration_mo, unit: COUNT, noun: "tháng"}
@@ -92,21 +89,18 @@ semantic_config:
       cause_label_vi: "giá sơ cấp cao hơn thị trường thứ cấp"
       action_code: EXTENDED_PAYMENT_SCHEDULE
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (giá sơ cấp so với thứ cấp {{secondary_gap}})."
-      recommendation_text: "Đề xuất xem xét giãn tiến độ thanh toán để kéo giá ròng về gần mặt bằng thứ cấp."
       required_evidence:
         - {slot: secondary_gap, table: dm_unit_friction_diagnostics, field: secondary_price_gap_pct, unit: PCT, signed: true}
     - cause_code: LUMP_SUM_TICKET_BARRIER
       cause_label_vi: "giá trị căn quá cao so với thu nhập"
       action_code: BANK_SUBSIDY_EXTENSION
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (giá trị căn bằng {{ticket_ratio}} thu nhập năm của hộ gia đình)."
-      recommendation_text: "Đề xuất xem xét kéo dài thời gian hỗ trợ lãi suất và ân hạn nợ gốc cùng ngân hàng đối tác."
       required_evidence:
         - {slot: ticket_ratio, table: dm_unit_friction_diagnostics, field: ticket_size_vs_income_ratio, unit: RATIO}
     - cause_code: OVERPRICED_VS_PEER
       cause_label_vi: "giá cao hơn nhóm tương đồng"
       action_code: TARGETED_PRICE_CORRECTION
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (đơn giá/m² so với trung vị peer {{spread}})."
-      recommendation_text: "Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung vị nhóm tương đồng."
       required_evidence:
         - {slot: spread, table: dm_unit_friction_diagnostics, field: price_spread_vs_peer_pct, unit: PCT, signed: true}
       supplementary_evidence:
@@ -118,7 +112,6 @@ semantic_config:
       cause_label_vi: "động lực bán hàng của sàn thấp"
       action_code: BOOST_BROKER_COMMISSION
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (hoa hồng sàn {{commission}})."
-      recommendation_text: "Đề xuất xem xét nâng hoa hồng hoặc thưởng chốt cọc cho sàn môi giới."
       required_evidence:
         - {slot: commission, table: fact_unit_inventory_snapshot, field: base_commission_pct, unit: PCT}
       supplementary_evidence:
@@ -127,14 +120,26 @@ semantic_config:
       cause_label_vi: "khách rơi nhiều ở phễu bán hàng"
       action_code: SALES_PITCH_AUDIT
       template: "Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}} (tỷ lệ rút cọc {{dropoff}})."
-      recommendation_text: "Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam kết với khách giữ chỗ."
       required_evidence:
         - {slot: dropoff, table: dm_unit_friction_diagnostics, field: funnel_dropoff_rate_pct, unit: PCT}
+
+  # Recommendation sentence per action_code (BR-10, D-33 as settled in P5): deterministic, the LLM
+  # never writes it. Must start with a `recommendation_prefixes` entry, no imperative phrase.
+  # Drafts: Sales Ops to review.
+  action_texts:
+    EXPEDITE_LEGAL_PROCEDURES: "Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý và bảo lãnh ngân hàng trước khi mở bán đại trà."
+    DEFECT_COMPENSATION_DISCOUNT: "Đề xuất xem xét chính sách chiết khấu bù trừ cho khuyết điểm công năng của căn."
+    INSULATION_INTERIOR_PACKAGE: "Đề xuất xem xét gói nội thất cách nhiệt kèm ưu đãi phí quản lý cho căn."
+    EXTENDED_PAYMENT_SCHEDULE: "Đề xuất xem xét giãn tiến độ thanh toán để kéo giá ròng về gần mặt bằng thứ cấp."
+    BANK_SUBSIDY_EXTENSION: "Đề xuất xem xét kéo dài thời gian hỗ trợ lãi suất và ân hạn nợ gốc cùng ngân hàng đối tác."
+    TARGETED_PRICE_CORRECTION: "Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung vị nhóm tương đồng."
+    BOOST_BROKER_COMMISSION: "Đề xuất xem xét nâng hoa hồng hoặc thưởng chốt cọc cho sàn môi giới."
+    SALES_PITCH_AUDIT: "Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam kết với khách giữ chỗ."
 
   # TEMPLATE fallback per insight_type (spec 8.2). ROOT_CAUSE_SIGNAL uses the per-cause template.
   # Drafts written for Phase 0 (assumed): Sales Ops to review the wording.
   insight_templates:
-    CAUSE_DISTRIBUTION: "Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}} tổng điểm quy nguyên nhân (có trọng số) và xuất hiện ở {{unit_share}} số căn quá hạn (đếm theo căn)."
+    CAUSE_DISTRIBUTION: "Tại {{scope_noun}} {{scope}}, {{cause_label}} chiếm {{weighted_share}} và xuất hiện ở {{unit_share}}."
     PATTERN: "Nhóm {{group}} có DOM trung vị {{group_dom}}, so với {{rest_dom}} ở các căn còn lại; đây là mối liên hệ đi kèm, chưa phải kết luận về nguyên nhân."
     MARKET_CONTEXT: "Bối cảnh thị trường {{market}} trong {{window_months}} gần nhất: lãi suất thả nổi từ {{interest_rate_start}} đến {{interest_rate}}, tỷ lệ hấp thụ từ {{absorption_rate_start}} đến {{absorption_rate}}; thông tin này chỉ mang tính tham khảo."
     DATA_LIMITATION: "Dữ liệu cho {{subject}} còn hạn chế: {{limitation}}."
@@ -181,9 +186,38 @@ semantic_config:
   # D-75): Sales Ops / DA review the wording. Phrase lists are matched after NFC + lowercase.
   language:
     # {{slots}} filled with text, not numbers (D-22).
-    label_slots: [unit, project, zone, scope, subject, group, market, cause_label, permit_status, limitation]
+    label_slots: [unit, project, zone, scope, scope_noun, subject, group, market, cause_label, permit_status, limitation]
+    # {{scope_noun}}: the noun of the subject's level, written by code (P5); the model never writes
+    # these nouns itself (SCOPE_NOUN_WRITTEN).
+    scope_nouns: {MARKET: "thị trường", PROJECT: "dự án", ZONE: "tòa", UNIT: "căn"}
+    scope_words: ["tòa", "toà", "dự án", "phân khu"]
     # GR-01: quantity words that state a number without a slot (D-21).
     quantity_words: ["một nửa", "gấp đôi", "gấp ba", "phần tư", "phần ba", "chục", "trăm", "nghìn", "ngàn", "triệu", "tỷ", "hàng loạt", "đa số", "phần lớn"]
+    # Words that contain a quantity word but state no number ("tỷ lệ" is a ratio, not a billion; P5).
+    quantity_word_exceptions: ["tỷ lệ", "tỷ trọng", "tỷ suất", "phần trăm"]
+    # Slots holding a median, and the words that would call it an average (P5, live).
+    median_slots: [group_dom, rest_dom]
+    # Ratio / count slots are rendered with a fixed label written by code, never by the model (P5):
+    # "{value}" is the formatted number. The model must not write these labels itself.
+    slot_labels:
+      unit_share: "{value} số căn quá hạn"
+      weighted_share: "{value} tổng điểm quy nguyên nhân"
+      overdue_units: "{value} quá hạn"
+      units_with_cause: "{value} quá hạn mang yếu tố này"
+      units_diagnosed: "{value} quá hạn đã chẩn đoán"
+      group_overdue_rate: "{value} số căn chưa bán của nhóm đã quá hạn"
+      rest_overdue_rate: "{value} số căn chưa bán còn lại đã quá hạn"
+      coverage: "{value} số căn quá hạn có dữ liệu hợp lệ"
+      units_valid: "{value} hợp lệ"
+      units_in_scope: "{value} trong phạm vi"
+    # DOM only through a DOM slot (DOM_MISSING): a unit root cause must bind one, and a sentence that
+    # speaks of lingering / DOM must carry one ("tồn kho" = inventory, not DOM).
+    dom_slots: [dom, group_dom, rest_dom]
+    dom_words: ["tồn", "dom"]
+    dom_word_exceptions: ["tồn kho"]
+    # Phrases that label a number: never right before or after a numeric {{slot}} (SLOT_LABEL_WRITTEN).
+    label_phrases: ["số căn", "tổng số căn", "tỷ trọng", "tổng điểm"]
+    mean_words: ["trung bình", "bình quân"]
     # GR-07: allowed only when every candidate of the item is `significant` (D-25).
     strong_comparison_phrases: ["cao hơn rõ", "thấp hơn rõ", "chậm hơn rõ", "nhanh hơn rõ", "vượt trội", "đáng kể", "khác biệt rõ", "nổi bật"]
     # GR-06: a recommendation is a suggestion needing approval (D-24).

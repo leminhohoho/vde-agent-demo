@@ -122,3 +122,33 @@ def test_braced_slot_names_are_counted() -> None:
         }
     )  # fmt: skip
     assert normalised_slot_count(draft) == 1
+
+
+def test_peer_numbers_are_not_offered_when_the_peer_group_is_too_small() -> None:
+    """Live P5: the model kept using `spread` of a candidate with 2 peers (PEER_HIDDEN, D-71)."""
+
+    from ..candidates import generate_candidates
+
+    data = dataset([unit(1)], [inventory(1, 150)], [diagnostic(1, 150, peer_count=2)], [cause(1, "OVERPRICED_VS_PEER")])
+    ctx = context(data)
+    cands = [c for c in generate_candidates(ctx, 40).candidates if c.task == "T1"]
+    assert "GROUP_TOO_SMALL" in cands[0].dq_flags and "spread" in cands[0].slots
+    text = user_prompt(ctx.request, cands, MemoryContext.empty(), ctx.cfg)
+    row = json.loads(text.split("<candidates>")[1].split("</candidates>")[0])[0]
+    assert "spread" not in row["slots"] and "peers" not in row["slots"]
+    assert not [r for r in row["refs"] if r.endswith((".spread", ".peers"))]
+
+
+def test_the_model_sees_numbers_with_their_labels() -> None:
+    from ..candidates.t2_distribution import t2_candidates
+    from .builders import scope
+
+    data = dataset(
+        [unit(i) for i in range(1, 11)], [inventory(i, 100 + i) for i in range(1, 11)],
+        [diagnostic(i, 100 + i) for i in range(1, 11)], [cause(i, "OVERPRICED_VS_PEER") for i in range(1, 11)],
+    )  # fmt: skip
+    ctx = context(data, tasks=("T2",), analysis_scope=scope("ZONE", zone_ids=["ZN-AQUA-01"]))
+    text = user_prompt(ctx.request, t2_candidates(ctx).candidates, MemoryContext.empty(), ctx.cfg)
+    row = json.loads(text.split("<candidates>")[1].split("</candidates>")[0])[0]
+    assert row["slots"]["weighted_share"] == "100% tổng điểm quy nguyên nhân"
+    assert row["slots"]["unit_share"] == "100% số căn quá hạn"

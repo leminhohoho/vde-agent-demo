@@ -161,7 +161,7 @@ def test_every_numeric_slot_of_a_cause_template_is_bound_by_its_evidence() -> No
     cfg = load_semantic_config(SEMANTIC)
     for c in cfg.causes:
         bound = {e.slot for e in c.required_evidence if e.unit} | {"dom", "overdue_units"}
-        used = set(re.findall(r"\{\{\s*([a-z_]+)\s*\}\}", c.template)) - LABEL_SLOTS
+        used = set(re.findall(r"\{\{\s*([a-z_]+)\s*\}\}", c.template)) - set(cfg.language.label_slots)
         assert used <= bound, (c.cause_code, used - bound)
 
 
@@ -183,7 +183,7 @@ def test_forbidden_phrases_are_stored_nfc_lowercase() -> None:
 
 def test_shipped_templates_obey_gr01_and_gr02_themselves() -> None:
     cfg = load_semantic_config(SEMANTIC)
-    texts = [c.template for c in cfg.causes] + [c.recommendation_text for c in cfg.causes]
+    texts = [c.template for c in cfg.causes] + list(cfg.action_texts.values())
     texts += [*cfg.insight_templates.values(), cfg.language.peer_hidden_template]
     assert set(cfg.insight_templates) >= {"CAUSE_DISTRIBUTION", "PATTERN", "MARKET_CONTEXT", "DATA_LIMITATION", "CONFLICT"}
     for text in texts:
@@ -339,7 +339,7 @@ def test_shipped_llm_config_matches_spec_7_5() -> None:
     )
     assert (cfg.repair.reasoning, cfg.repair.max_attempts) == ("low", 1)
     lim = cfg.limits
-    assert (lim.max_candidates_in_context, lim.max_input_tokens, lim.max_output_tokens) == (40, 16000, 2500)
+    assert (lim.max_candidates_in_context, lim.max_input_tokens, lim.max_output_tokens) == (40, 16000, 4000)
     assert (lim.max_selected_insights, lim.timeout_ms, lim.transient_retries) == (12, 20000, 1)
     price = cfg.price_for("gemini-3.5-flash-lite")
     assert price is not None
@@ -365,3 +365,27 @@ def test_shipped_llm_config_matches_spec_7_5() -> None:
 def test_invalid_llm_config_names_the_problem(tmp_path: Path, change: Any, message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         load_llm_config(mutated(tmp_path, LLM, change))
+
+
+def test_every_action_has_a_config_recommendation_that_is_a_suggestion() -> None:
+    cfg = load_semantic_config(SEMANTIC)
+    assert {c.action_code for c in cfg.causes} <= set(cfg.action_texts)
+    for text in cfg.action_texts.values():
+        assert any(text.startswith(p) for p in ("Đề xuất", "Có thể cân nhắc")), text
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d["action_texts"].pop("TARGETED_PRICE_CORRECTION"),
+        lambda d: d["action_texts"].update(TARGETED_PRICE_CORRECTION="Hãy giảm giá ngay lập tức."),
+        lambda d: d["action_texts"].update(TARGETED_PRICE_CORRECTION="Giảm giá căn."),
+    ],
+)
+def test_a_missing_or_imperative_action_text_is_a_config_error(tmp_path: Path, change: Any) -> None:
+    data = yaml.safe_load(SEMANTIC.read_text(encoding="utf-8"))
+    change(data["semantic_config"])
+    bad = tmp_path / "semantic_insight.yaml"
+    bad.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_semantic_config(bad)

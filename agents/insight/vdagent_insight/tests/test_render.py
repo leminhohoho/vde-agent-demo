@@ -85,8 +85,9 @@ def test_distribution_template_states_both_counting_methods() -> None:
     ctx = context(data, tasks=("T2",), analysis_scope=scope("ZONE", zone_ids=["ZN-AQUA-01"]))
     (c,) = t2_candidates(ctx).candidates
     text = render_template(c, ctx.cfg, ctx.view).rendered_text
-    assert text.startswith("Trong Tòa Aqua 1, giá cao hơn nhóm tương đồng chiếm 100% tổng điểm")
-    assert "(có trọng số)" in text and "(đếm theo căn)" in text
+    assert "giá cao hơn nhóm tương đồng chiếm 100% tổng điểm quy nguyên nhân" in text
+    assert "xuất hiện ở 100% số căn quá hạn" in text
+    assert text.count("tổng điểm") == 1 and text.count("số căn quá hạn") == 1
 
 
 def test_limitation_template_uses_the_catalogue_message() -> None:
@@ -128,7 +129,7 @@ def test_unresolvable_slots_are_render_errors(template: str, refs: dict[str, str
 
 def test_recommendation_comes_from_the_config_only_with_an_action() -> None:
     ctx, c = overpriced()
-    assert recommendation_text(c, ctx.cfg) == ctx.cfg.cause("OVERPRICED_VS_PEER").recommendation_text
+    assert recommendation_text(c, ctx.cfg) == ctx.cfg.action_texts["TARGETED_PRICE_CORRECTION"]
     ctx2 = context(
         dataset([unit(11)], [inventory(11, 145)], [diagnostic(11, 145)], [cause(11, "OVERPRICED_VS_PEER")]), tasks=("T1",)
     )
@@ -146,3 +147,35 @@ def test_a_unit_word_repeated_after_a_slot_is_written_once() -> None:
     )
     assert claim.rendered_text.count("ngày") == 1 and "căn căn" not in claim.rendered_text
     assert " căn tương đồng" in claim.rendered_text and "ngày, so" in claim.rendered_text
+
+
+def test_q2_ratio_and_count_slots_are_rendered_with_their_fixed_label() -> None:
+    """Live P5 Q2/Q3: "tỷ trọng 13,3% trong tổng số căn chậm", "100% số căn" (which base?)."""
+    units = [unit(i) for i in range(1, 11)]
+    data = dataset(
+        units, [inventory(i, 100 + i) for i in range(1, 11)], [diagnostic(i, 100 + i) for i in range(1, 11)],
+        [cause(i, "OVERPRICED_VS_PEER") for i in range(1, 11)],
+    )  # fmt: skip
+    ctx = context(data, tasks=("T2",), analysis_scope=scope("ZONE", zone_ids=["ZN-AQUA-01"]))
+    (c,) = t2_candidates(ctx).candidates
+    cid = c.candidate_id
+    refs = {"cause_label": f"{cid}.cause_label", "w": f"{cid}.weighted_share", "u": f"{cid}.unit_share"}
+    claim = bind_claim("{{cause_label}} chiếm {{w}} và xuất hiện ở {{u}}.", refs, {cid: c}, ctx.cfg, ctx.view)
+    assert claim.rendered_text == (
+        "Giá cao hơn nhóm tương đồng chiếm 100% tổng điểm quy nguyên nhân và xuất hiện ở 100% số căn quá hạn."
+    )
+    assert [b.display for b in claim.numeric_bindings] == ["100%", "100%"]  # the number itself stays bare
+
+
+def test_the_scope_noun_follows_the_level_of_the_subject() -> None:
+    units = [unit(i) for i in range(1, 11)]
+    data = dataset(
+        units, [inventory(i, 100 + i) for i in range(1, 11)], [diagnostic(i, 100 + i) for i in range(1, 11)],
+        [cause(i, "OVERPRICED_VS_PEER") for i in range(1, 11)],
+    )  # fmt: skip
+    for level, ids, noun in (("ZONE", {"zone_ids": ["ZN-AQUA-01"]}, "tòa"), ("PROJECT", {"project_ids": ["PRJ-X"]}, "dự án")):
+        ctx = context(data, tasks=("T2",), analysis_scope=scope(level, **ids))
+        (c,) = t2_candidates(ctx).candidates
+        cid = c.candidate_id
+        refs = {"n": f"{cid}.scope_noun", "s": f"{cid}.scope"}
+        assert bind_claim("Tại {{n}} {{s}}.", refs, {cid: c}, ctx.cfg, ctx.view).rendered_text.startswith(f"Tại {noun} ")

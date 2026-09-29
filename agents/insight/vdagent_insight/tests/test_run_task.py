@@ -4,6 +4,8 @@ usage, memory, and TC-08→11, 16, 19, 20, 29, 31, 33 end to end."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -410,3 +412,31 @@ async def test_tc32_stale_refs_are_dropped_and_the_result_is_as_without_memory(t
     assert events.of("INSIGHT_MEMORY_READ")["stale_refs_dropped"] == 3
     assert with_memory.envelope is not None and without.envelope is not None
     assert with_memory.envelope.content_hash == without.envelope.content_hash
+
+
+async def test_a_pinned_as_of_decides_freshness_instead_of_the_wall_clock(tmp_path: Path) -> None:
+    request, reader = task(overdue_unit())
+    late = AS_OF + timedelta(days=90)
+    stale_deps = dataclasses.replace(deps(tmp_path / "a", reader), clock=lambda: late)
+    stale = await run_task(request, stale_deps)
+    pinned = await run_task(request, dataclasses.replace(deps(tmp_path / "b", reader), clock=lambda: late, as_of=AS_OF))
+    assert stale.envelope is not None and pinned.envelope is not None
+    flags = [c for i in stale.envelope.payload.insights for c in i.confidence.reasons]
+    assert "STALE_SNAPSHOT" in flags
+    assert "STALE_SNAPSHOT" not in [c for i in pinned.envelope.payload.insights for c in i.confidence.reasons]
+    assert pinned.envelope.producer.replay is not None and pinned.envelope.producer.replay.as_of == AS_OF.isoformat()
+
+
+async def test_a_zone_question_leads_with_the_zone_cause_distribution(tmp_path: Path) -> None:
+    ids = range(1, 7)
+    data = dataset(
+        [unit(i) for i in ids], [inventory(i, 150 + i) for i in ids], [diagnostic(i, 150 + i) for i in ids],
+        [cause(i, "OVERPRICED_VS_PEER") for i in ids],
+    )  # fmt: skip
+    request, reader = task(data, tasks=("T1", "T2", "T6", "T7"), analysis_scope=scope("ZONE", zone_ids=["ZN-AQUA-01"]))
+    result, _ = await run(tmp_path, request, reader)
+    env = result.envelope
+    assert env is not None
+    first = env.payload.insights[0]
+    assert (first.insight_type, first.level, first.materiality) == ("CAUSE_DISTRIBUTION", "ZONE", "KEY")
+    assert env.payload.summary.headline_insight_ids[0] == first.insight_id

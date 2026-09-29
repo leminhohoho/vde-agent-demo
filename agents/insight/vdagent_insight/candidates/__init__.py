@@ -74,5 +74,5 @@ def generate_candidates(ctx: CandidateContext, max_candidates: int) -> Candidate
     batch = CandidateBatch()
     for task in (t1_candidates, t2_candidates, t3_candidates, t5_candidates, t7_candidates):
         batch.extend(task(ctx))
-    kept, cut = select_for_context(batch.candidates, max_candidates)
+    kept, cut = select_for_context(batch.candidates, max_candidates, scope_level=ctx.request.analysis_scope.level)
     return CandidateBatch(candidates=kept, rejected=batch.rejected + cut)

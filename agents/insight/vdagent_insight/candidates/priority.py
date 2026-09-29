@@ -7,7 +7,9 @@ order only, never confidence or KEY.
 
 `select_for_context` keeps every T7 candidate, fills the rest of `max_candidates_in_context` by
 priority (ties broken by `candidate_id`, so the cut is replayable) and rejects the others with
-CONTEXT_BUDGET. Token counting (step 5 part 3) belongs to llm/preflight.py.
+CONTEXT_BUDGET. In a ZONE or PROJECT scope the candidates of that level (the distribution, the
+patterns; not T7) come before unit-level ones (D-78): a tower question is answered at tower
+level first. Token counting (step 5 part 3) belongs to llm/preflight.py.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import Decimal
 
-from ..contracts import CandidateTask, InsightCandidate, RejectedCandidate
+from ..contracts import CandidateTask, InsightCandidate, Level, RejectedCandidate
 from ..settings import SemanticParams
 
 CONTEXT_BUDGET = "CONTEXT_BUDGET"
@@ -34,14 +36,19 @@ def boosted(priority: Decimal, subject_id: str, recent_subject_ids: frozenset[st
     return priority + boost if subject_id in recent_subject_ids else priority
 
 
-def _order(c: InsightCandidate) -> tuple[Decimal, str]:
-    return (-c.priority, c.candidate_id)
+def scope_rank(c: InsightCandidate, scope_level: Level) -> int:
+    """0 for an analysis candidate (not T7) at the level of a ZONE/PROJECT scope, else 1 (D-78)."""
+    return 0 if scope_level in ("ZONE", "PROJECT") and c.level == scope_level and c.task != "T7" else 1
+
+
+def rank_key(c: InsightCandidate, scope_level: Level = "UNIT") -> tuple[int, Decimal, str]:
+    return (scope_rank(c, scope_level), -c.priority, c.candidate_id)
 
 
 def select_for_context(
-    candidates: Sequence[InsightCandidate], max_candidates: int
+    candidates: Sequence[InsightCandidate], max_candidates: int, *, scope_level: Level = "UNIT"
 ) -> tuple[list[InsightCandidate], list[RejectedCandidate]]:
-    ranked = sorted(candidates, key=_order)
+    ranked = sorted(candidates, key=lambda c: rank_key(c, scope_level))
     limitations = [c for c in ranked if c.task == "T7"]
     room = max(max_candidates - len(limitations), 0)
     others = [c for c in ranked if c.task != "T7"]

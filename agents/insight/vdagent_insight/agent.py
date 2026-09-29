@@ -114,6 +114,9 @@ class InsightDeps:
     """None → TEMPLATE mode (no key configured, or `--no-llm`)."""
     clock: Callable[[], datetime] = datetime.now
     events: EventSink = field(default_factory=json_event_sink)
+    as_of: datetime | None = None
+    """The task clock for freshness (D-52); None → `clock()` when the task starts. Pinned for the frozen
+    data pack of the demo (runtime.py, `INSIGHT_AS_OF`)."""
 
 
 @dataclass(frozen=True)
@@ -338,7 +341,7 @@ async def run_task(request: InsightTaskRequest, deps: InsightDeps) -> TaskResult
         except ConfigError:
             raise InputRejected("E03", f"không có semantic_config version {request.semantic_config_version}") from None
         artifacts = await read_inputs(request, deps.reader)
-        as_of = deps.clock()
+        as_of = deps.as_of or deps.clock()
         ctx = build_context(request, artifacts, cfg, as_of)
         outside = scope_violations(request, ctx.view)
         if outside:

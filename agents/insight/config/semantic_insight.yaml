@@ -136,10 +136,20 @@ semantic_config:
   insight_templates:
     CAUSE_DISTRIBUTION: "Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}} tổng điểm quy nguyên nhân (có trọng số) và xuất hiện ở {{unit_share}} số căn quá hạn (đếm theo căn)."
     PATTERN: "Nhóm {{group}} có DOM trung vị {{group_dom}}, so với {{rest_dom}} ở các căn còn lại; đây là mối liên hệ đi kèm, chưa phải kết luận về nguyên nhân."
-    MARKET_CONTEXT: "Bối cảnh thị trường {{market}}: lãi suất {{interest_rate}}, tỷ lệ hấp thụ {{absorption_rate}}; thông tin này chỉ mang tính tham khảo."
+    MARKET_CONTEXT: "Bối cảnh thị trường {{market}} trong {{window_months}} gần nhất: lãi suất thả nổi từ {{interest_rate_start}} đến {{interest_rate}}, tỷ lệ hấp thụ từ {{absorption_rate_start}} đến {{absorption_rate}}; thông tin này chỉ mang tính tham khảo."
     DATA_LIMITATION: "Dữ liệu cho {{subject}} còn hạn chế: {{limitation}}."
     CONFLICT: "Hai nguồn dữ liệu cho {{subject}} chưa nhất quán về yếu tố chính; cần kiểm tra lại trước khi kết luận."
     NO_OVERDUE_UNITS: "Không có căn quá hạn trong phạm vi {{scope}} tại kỳ dữ liệu này."
+
+  # T5 metrics (D-72): `trend: true` = latest month vs the first month of the available window;
+  # `trend: false` = inferred in the DW (PENDING there), stated at the latest level only, with the
+  # INFERRED_MARKET_METRIC limitation.
+  market_metrics:
+    - {slot: interest_rate, column: floating_mortgage_rate_pct, unit: PCT, trend: true}
+    - {slot: absorption_rate, column: absorption_rate_pct, unit: PCT, trend: true}
+    - {slot: moi, column: months_of_inventory_moi, unit: RATIO, noun: "tháng", trend: false}
+    - {slot: pir, column: macro_price_to_income_ratio, unit: RATIO, trend: false}
+    - {slot: household_income, column: median_household_income_vnd, unit: VND, trend: false}
 
   # T3 dimensions (spec 6.2): each groups the unsold units of the scope by one column.
   pattern_dimensions:

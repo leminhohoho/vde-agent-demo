@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from vdagent_sdk import PluginConfigError
 
-from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, ProjectRow, UnitRow
+from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, MacroRow, ProjectRow, UnitRow
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"  # agents/<name>/.env
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"  # agents/<name>/config
@@ -236,6 +236,17 @@ class PatternDimension(_Config):
     table: Literal["dim_unit_master", "fact_unit_inventory_snapshot"]
 
 
+class MarketMetric(_Config):
+    """One T5 metric of fact_market_macro_monthly (D-72)."""
+
+    slot: str
+    column: str
+    unit: BindingUnit
+    noun: str | None = None
+    trend: bool
+    """True: latest vs first month of the window; False: latest level only (inferred in the DW)."""
+
+
 class _SemanticRaw(_Config):
     version: str = Field(min_length=1)
     params: dict[str, _ParamEntry]
@@ -244,6 +255,7 @@ class _SemanticRaw(_Config):
     forbidden_phrases: list[str]
     english_whitelist: list[str]
     pattern_dimensions: list[PatternDimension]
+    market_metrics: list[MarketMetric]
 
 
 class _SemanticFile(_Config):
@@ -260,6 +272,7 @@ class SemanticConfig(_Config):
     """NFC + lowercase, ready for GR-02 matching."""
     english_whitelist: tuple[str, ...]
     pattern_dimensions: tuple[PatternDimension, ...]
+    market_metrics: tuple[MarketMetric, ...]
 
     @property
     def allowed_cause_codes(self) -> frozenset[str]:
@@ -303,6 +316,9 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         raise ConfigError(
             f"{path.name}: min_group_size ({params.min_group_size}) must equal peer_tiers.describe_min ({tiers.describe_min})"
         )
+    for metric in raw.market_metrics:
+        if metric.column not in MacroRow.model_fields:
+            raise ConfigError(f"{path.name}: market metric: fact_market_macro_monthly has no column {metric.column}")
     for dim in raw.pattern_dimensions:
         if dim.name not in PATTERN_TABLE_MODELS[dim.table].model_fields:
             raise ConfigError(f"{path.name}: pattern dimension: {dim.table} has no column {dim.name}")
@@ -315,6 +331,7 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         forbidden_phrases=tuple(normalize_phrase(p) for p in raw.forbidden_phrases),
         english_whitelist=tuple(raw.english_whitelist),
         pattern_dimensions=tuple(raw.pattern_dimensions),
+        market_metrics=tuple(raw.market_metrics),
     )
 
 

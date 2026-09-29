@@ -1,40 +1,34 @@
-"""T5 Market Context (spec §6.2, BR-09): one MARKET_CONTEXT candidate per market + segment.
+"""T5 Market Context (spec §6.2, BR-09, D-72): one MARKET_CONTEXT candidate per market + segment.
 
-Pure. For the market and segment of each project in scope, the latest month of the optional
-`market_context` artifact is set against the same month one year earlier: mortgage rate,
-absorption rate, MOI and PIR (a null or missing value leaves its slot out). Context only
-(BR-09): no cause_code, no action_code, never a primary cause, `significant` false. One DW table
-backs it, so confidence tops out at MEDIUM.
+Pure. For the market and segment of each project in scope, over the months present in the optional
+`market_context` artifact (the data pack holds one 12-month window, no year-ago month):
+- trend metrics (`market_metrics` with `trend: true`: mortgage rate, absorption) bind the latest
+  month as `<slot>` and the first month of the window as `<slot>_start`, plus `window_months`;
+- inferred metrics (`trend: false`: MOI, PIR, household income, PENDING in the DW) bind the latest
+  level only and add the INFERRED_MARKET_METRIC limitation.
+A null value leaves its slot out. Context only (BR-09): no cause_code, no action_code, never a
+primary cause, `significant` false. One DW table backs it, so confidence tops out at MEDIUM.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 
-from ..contracts import BindingUnit, CandidateLineage, InsightCandidate, MacroRow, NumericBinding, Subject
-from .common import CandidateBatch, CandidateContext, binding, cap_single_source
+from ..contracts import CandidateLineage, InsightCandidate, MacroRow, NumericBinding, Subject
+from ..settings import MarketMetric
+from .common import CandidateBatch, CandidateContext, binding, cap_single_source, computed_ref
 from .priority import base_priority, boosted
 
 MACRO = "fact_market_macro_monthly"
-
-# (slot, column, unit, noun)
-METRICS: tuple[tuple[str, str, BindingUnit, str | None], ...] = (
-    ("interest_rate", "floating_mortgage_rate_pct", "PCT", None),
-    ("absorption_rate", "absorption_rate_pct", "PCT", None),
-    ("moi", "months_of_inventory_moi", "RATIO", "tháng"),
-    ("pir", "macro_price_to_income_ratio", "RATIO", None),
-)
+INFERRED = "INFERRED_MARKET_METRIC"
 
 
-def _slots(ctx: CandidateContext, row: MacroRow, index: int, suffix: str) -> dict[str, NumericBinding]:
-    slots: dict[str, NumericBinding] = {}
-    for slot, column, unit, noun in METRICS:
-        value = getattr(row, column)
-        if value is not None:
-            name = slot + suffix
-            ref = f"{ctx.market_id}#/{MACRO}/{index}/{column}"
-            slots[name] = binding(name, Decimal(value), unit, ref, noun=noun)
-    return slots
+def _bind(ctx: CandidateContext, metric: MarketMetric, row: MacroRow, index: int, name: str) -> NumericBinding | None:
+    value = getattr(row, metric.column)
+    if value is None:
+        return None
+    ref = f"{ctx.market_id}#/{MACRO}/{index}/{metric.column}"
+    return binding(name, Decimal(value), metric.unit, ref, noun=metric.noun)
 
 
 def t5_candidates(ctx: CandidateContext) -> CandidateBatch:
@@ -50,33 +44,46 @@ def t5_candidates(ctx: CandidateContext) -> CandidateBatch:
         }
     )
     for market_id, segment in markets:
-        matching = [(i, r) for i, r in rows if r.market_id == market_id and r.segment == segment]
+        matching = sorted(
+            ((i, r) for i, r in rows if r.market_id == market_id and r.segment == segment), key=lambda ir: ir[1].date_key
+        )
         if not matching:
             continue
-        latest_index, latest = max(matching, key=lambda ir: ir[1].date_key)
-        prior_month = (latest.date_key // 100) - 100  # YYYYMM one year earlier
-        prior = next(((i, r) for i, r in matching if r.date_key // 100 == prior_month), None)
-        slots = _slots(ctx, latest, latest_index, "")
-        evidence = [f"{ctx.market_id}#/{MACRO}/{latest_index}"]
-        if prior is not None:
-            slots |= _slots(ctx, prior[1], prior[0], "_prior")
-            evidence.append(f"{ctx.market_id}#/{MACRO}/{prior[0]}")
+        candidate_id = f"C-T5-{market_id}-{segment}"
+        (first_index, first), (last_index, last) = matching[0], matching[-1]
+        months = len({r.date_key // 100 for _, r in matching})
+        slots = {
+            "window_months": binding("window_months", months, "COUNT", computed_ref(candidate_id, "window_months"), noun="tháng")
+        }
         flags: list[str] = []
+        for metric in ctx.cfg.market_metrics:
+            latest = _bind(ctx, metric, last, last_index, metric.slot)
+            if latest is None:
+                continue
+            slots[metric.slot] = latest
+            if not metric.trend:
+                if INFERRED not in flags:
+                    flags.append(INFERRED)
+            elif first_index != last_index:
+                start = _bind(ctx, metric, first, first_index, f"{metric.slot}_start")
+                if start is not None:
+                    slots[start.slot] = start
+        evidence = sorted({f"{ctx.market_id}#/{MACRO}/{first_index}", f"{ctx.market_id}#/{MACRO}/{last_index}"})
         confidence = cap_single_source("HIGH", {MACRO})  # freshness (5.5) is about inventory and prices
-        subject = Subject(type="market", id=market_id, label=f"{market_id} ({segment})")
         batch.candidates.append(
             InsightCandidate.model_validate(
                 {
-                    "candidate_id": f"C-T5-{market_id}-{segment}",
+                    "candidate_id": candidate_id,
                     "task": "T5",
                     "insight_type": "MARKET_CONTEXT",
                     "level": "MARKET",
-                    "subject": subject,
+                    "subject": Subject(type="market", id=market_id, label=f"{market_id} ({segment})"),
                     "slots": slots,
                     "evidence_refs": evidence,
                     "lineage": CandidateLineage(
                         source_refs=[ctx.source(MACRO)],
-                        calculation_refs=[ctx.calculation(MACRO, column) for _, column, _, _ in METRICS],
+                        calculation_refs=[ctx.calculation(MACRO, m.column) for m in ctx.cfg.market_metrics]
+                        + ["insight.t5.window_trend@1"],
                     ),
                     "significant": False,
                     "confidence": confidence,

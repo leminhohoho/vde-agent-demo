@@ -202,8 +202,4 @@ def test_tc06_config_differs_from_the_shipped_one_only_in_version_and_threshold(
     shipped = SemanticConfigRegistry(CONFIG_DIR).get("3.1.0")
     tc06 = SemanticConfigRegistry(FIXTURES / "tc06" / "config").get("sem-tc06-60")
     assert tc06.params.model_copy(update={"overdue_threshold_days": 90}) == shipped.params
-    assert (tc06.causes, tc06.insight_templates, tc06.pattern_dimensions) == (
-        shipped.causes,
-        shipped.insight_templates,
-        shipped.pattern_dimensions,
-    )
+    assert tc06.model_copy(update={"version": shipped.version, "params": shipped.params}) == shipped

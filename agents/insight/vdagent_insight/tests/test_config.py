@@ -339,7 +339,7 @@ def test_shipped_llm_config_matches_spec_7_5() -> None:
     )
     assert (cfg.repair.reasoning, cfg.repair.max_attempts) == ("low", 1)
     lim = cfg.limits
-    assert (lim.max_candidates_in_context, lim.max_input_tokens, lim.max_output_tokens) == (40, 16000, 2500)
+    assert (lim.max_candidates_in_context, lim.max_input_tokens, lim.max_output_tokens) == (40, 16000, 4000)
     assert (lim.max_selected_insights, lim.timeout_ms, lim.transient_retries) == (12, 20000, 1)
     price = cfg.price_for("gemini-3.5-flash-lite")
     assert price is not None

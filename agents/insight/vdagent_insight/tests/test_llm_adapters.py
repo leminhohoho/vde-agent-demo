@@ -82,7 +82,7 @@ async def test_gemini_sends_the_config_parameters_and_normalises_usage() -> None
     assert config.system_instruction == "SYS" and config.response_mime_type == "application/json"
     assert config.response_json_schema["additionalProperties"] is False
     assert config.thinking_config.thinking_level == genai_types.ThinkingLevel.MINIMAL
-    assert config.max_output_tokens == 2500 and config.automatic_function_calling.disable is True
+    assert config.max_output_tokens == 4000 and config.automatic_function_calling.disable is True
     assert config.temperature is None
     assert (usage.provider, usage.call_type, usage.input_tokens, usage.cached_input_tokens, usage.finish_reason) == (
         "gemini",
@@ -183,7 +183,7 @@ async def test_openai_sends_strict_json_schema_and_no_reasoning() -> None:
     draft, usage = await openai_call(OpenAIClient(fake, CFG))
     assert isinstance(draft, LlmInsightDraft)
     (call,) = fake.calls
-    assert (call["model"], call["instructions"], call["input"], call["max_output_tokens"]) == ("gpt-6-luna", "SYS", "USER", 2500)
+    assert (call["model"], call["instructions"], call["input"], call["max_output_tokens"]) == ("gpt-6-luna", "SYS", "USER", 4000)
     fmt = call["text"]["format"]
     assert (fmt["type"], fmt["strict"], fmt["name"]) == ("json_schema", True, "LlmInsightDraft")
     assert call["reasoning"] == {"effort": "none"}

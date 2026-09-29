@@ -474,7 +474,7 @@ Trước khi gọi LLM, agent chạy pre-flight bằng code để không bao gi�
 1. Xếp candidate theo `priority = attribution_score / severity_rank (candidate không có rank dùng 0.5 cho T2/T3, 0.3 cho T5)` (giảm dần); candidate T7 luôn được giữ.
 2. Cắt còn tối đa `llm.max_candidates_in_context` (40); phần bị cắt vào `rejected_candidates` với lý do `CONTEXT_BUDGET`. Ở phạm vi ZONE/PROJECT, candidate phân tích cùng cấp phạm vi (T2, T3; không tính T7) đứng trước căn lẻ khi cắt và khi xếp KEY (D-78).
 3. Đếm token bằng API count tokens của provider (hoặc ước tính `ceil(chars / 3)` nếu API lỗi). Nếu vượt `llm.max_input_tokens` (16.000) thì bỏ tiếp candidate ưu tiên thấp nhất cho đến khi vừa.
-4. Gọi LLM với `max_output_tokens` (2.500). Nếu provider báo cắt vì hết token (finish reason = length/MAX\_TOKENS) thì xử lý như E09.
+4. Gọi LLM với `max_output_tokens` (4.000; P5-2). Nếu provider báo cắt vì hết token (finish reason = length/MAX\_TOKENS) thì xử lý như E09.
 5. Output chọn tối đa `llm.max_selected_insights` (12) insight, trong đó tối đa `max_key_insights` (5) là KEY.
 
 ### 6.5. Schema nội bộ
@@ -589,7 +589,7 @@ Mọi tên model, tham số và giá nằm trong file config có version, không
 
 ```yaml
 insight_llm_config:
-  version: "2026-09-29c"
+  version: "2026-09-30"
   prompt_version: "insight-prompt-1.4.0"   # ghi cả trong prompts/*.md; đổi prompt → tăng (luật 12)
   primary:
     provider: gemini
@@ -606,7 +606,7 @@ insight_llm_config:
   limits:
     max_candidates_in_context: 40
     max_input_tokens: 16000
-    max_output_tokens: 2500
+    max_output_tokens: 4000         # P5-2
     max_selected_insights: 12
     timeout_ms: 20000
     transient_retries: 1           # backoff rồi chuyển fallback (D-35)

@@ -5,7 +5,7 @@
 # `prompt_version` must be bumped whenever prompts/system.md or prompts/repair.md changes (luật 12).
 
 insight_llm_config:
-  version: "2026-09-29c"
+  version: "2026-09-30"
   prompt_version: "insight-prompt-1.4.0"  # prompts/*.md carry the same value
   primary:
     provider: gemini
@@ -22,7 +22,7 @@ insight_llm_config:
   limits:
     max_candidates_in_context: 40
     max_input_tokens: 16000
-    max_output_tokens: 2500
+    max_output_tokens: 4000         # P5-2 (29/09): 12 items in pretty JSON can pass 2 500
     max_selected_insights: 12
     timeout_ms: 20000
     transient_retries: 1           # backoff 1 s, then the fallback provider

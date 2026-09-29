@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,7 @@ from ..render import RenderError, bind_claim, recommendation_text, render_templa
 from .builders import cause, context, dataset, diagnostic, dq, dq_field, inventory, project, scope, unit
 
 
-def overpriced(**diag_kw: object) -> tuple[CandidateContext, InsightCandidate]:
+def overpriced(**diag_kw: Any) -> tuple[CandidateContext, InsightCandidate]:
     data = dataset(
         [unit(11, unit_code="SAPPHIRE1-16.231")],
         [inventory(11, 145)],
@@ -68,7 +69,8 @@ def test_legal_template_says_what_the_project_lacks(permit: bool, guarantee: boo
     (c,) = t1_candidates(ctx).candidates
     claim = render_template(c, ctx.cfg, ctx.view)
     assert claim.rendered_text == (
-        f"Dự án Dự án X chưa đủ {label}; vướng mắc pháp lý / giấy phép bán hàng là yếu tố có khả năng liên quan tới 1 căn quá hạn."
+        f"Dự án Dự án X chưa đủ {label}; vướng mắc pháp lý / giấy phép bán hàng "
+        "là yếu tố có khả năng liên quan tới 1 căn quá hạn."
     )
 
 

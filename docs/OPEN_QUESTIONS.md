@@ -11,7 +11,7 @@
 | Q4 | `ctx.memory` scope (user, agent), chỉ có text, không expiry/snapshot/conversation, hết hiệu lực khi `invoke` return. | Payload JSON có schema trong `text`, lọc expiry/snapshot/conversation bằng code. Job extract/compact chạy sau emit, trước khi `invoke` return, timeout `memory.job_timeout_s = 5`. P0 chỉ `NoOpMemory`, bản thật ở P4. | CHỐT |
 | Q5 | Spec viết `LlmClient`/`InsightMemory` đồng bộ; sdk R10 cấm block event loop. | Giữ tên và chữ ký, đổi sang `async def`. | CHỐT |
 | Q6 | Sửa ngoài `agents/insight/`. | Được sửa `agents/insight/pyproject.toml`, `uv.lock`, thêm target Makefile `insight-test`, `insight-lint`. Type-check bằng basedpyright (config sẵn ở root). Repo chưa có linter → thêm ruff (chạy qua `uvx`, config trong `agents/insight/pyproject.toml`). | CHỐT |
-| Q7 | `tests/test_agent.py` test hành vi LangChain; `README.md` gốc và `agents/_template/README.md` lấy insight làm recipe LangChain. | Giữ `test_agent.py` tới P4 rồi thay. **Không** sửa hai README: nhóm cần chọn agent khác (ví dụ report) làm recipe LangChain. | README: MỞ |
+| Q7 | `tests/test_agent.py` test hành vi LangChain; `README.md` gốc và `agents/_template/README.md` lấy insight làm recipe LangChain. | `test_agent.py` đã xóa ở P4 (P4-13). **Không** sửa hai README: nhóm cần chọn agent khác (ví dụ report) làm recipe LangChain. | README: MỞ |
 | Q8a | `is_peer_sample_constrained`, số peer không có trong bảng DW nào. | Fixture tự thêm cột `is_peer_sample_constrained`, `peer_count` vào mart, đánh dấu `TODO(data-agent-contract)`. | CHỐT tạm |
 | Q8b | TC-11 nhắc "Comparison snapshot" dù Insight không đọc Comparison. | Hiểu là lệch snapshot giữa các artifact đầu vào (metric vs dq/dataset). | CHỐT |
 | Q8c | `LlmUsage.cost_usd` là string nhưng TC-28 cần `null`. | `cost_usd: str \| None`. | CHỐT |
@@ -75,6 +75,25 @@ Chi tiết và số liệu: `docs/INSIGHT_P2_P5_DECISIONS.md` (mục "Quyết đ
 
 Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egress trong docker-compose kiểm ở P5.
 
+## Phase 4 (run_task, store, bridge, memory, bỏ LangChain; demo trên data pack)
+
+| # | Quyết định / giả định | Trạng thái |
+|---|---|---|
+| P4-1 | **Chế độ tương thích (tạm tới D-10).** Orchestrator hiện gửi câu hỏi tự do. `bridge.py` dựng `InsightTaskRequest` bằng luật cố định, không gọi LLM: mã căn theo regex của config (D-73), tên tòa/dự án so với danh mục data pack (bỏ dấu, bỏ tiền tố "The"), intent theo từ khóa (`config/bridge.yaml`: "so sánh" → PEER_GROUP, "vì sao/tại sao/bán chậm…" → SLOW_MOVING, "trung bình/thống kê" → LOOKUP, không có từ khóa → SLOW_MOVING). Không nhận ra phạm vi → trả E01 kèm hướng dẫn. JSON (trần hoặc trong ```json) vẫn được ưu tiên; trường thiếu (run_id, task_id, snapshot, version, refs, user_context) được điền từ data pack. | TẠM (D-10 MỞ) |
+| P4-2 | `run_id`/`task_id` = UUID5 của `invocation_id` (gọi lại cùng invocation → artifact cũ, TC-29); `conversation_id` = UUID5 của `ctx.task_id` của backend (D-41, để drill-down trong cùng task dùng được memory). | TẠM |
+| P4-3 | D-14: ở chế độ tương thích `role = SALES_MANAGER` (`config/bridge.yaml`) và `authorized_scope` = mọi dự án trong data pack, vì chưa có dữ liệu phân quyền dự án/zone. JSON request mang `user_context` riêng thì dùng của request (E04 vẫn kiểm). | MỞ |
+| P4-4 | D-11: trả lời = tóm tắt tiếng Việt + `artifact_id` + khối JSON rút gọn các KEY insight (`id`, `rendered_text`, `eligible_for_conclusion`, `limitations`, `recommendation`), tối đa 6.000 ký tự (cắt bớt item, `truncated: true`). Artifact đầy đủ nằm trong `var/insight_artifacts.db`. Report chưa đọc được store này (D-12). | TẠM (D-11, D-12 MỞ) |
+| P4-5 | D-52 bổ sung: data pack là snapshot đóng băng (30/06), nên đồng hồ thật (29/09) làm mọi lần chạy bị STALE_SNAPSHOT và mất KEY. `INSIGHT_AS_OF=snapshot` (mặc định) ghim `as_of` = 08:00 ngày sau snapshot; `now` = đồng hồ thật; hoặc một ISO datetime có múi giờ. `as_of` lưu trong `producer.replay`. | TẠM (cần PO xác nhận cho demo) |
+| P4-6 | D-78 (mới): ở phạm vi ZONE/PROJECT, candidate phân tích cùng cấp phạm vi (T2 phân bố, T3 pattern; không tính T7) đứng trước căn lẻ, cả khi cắt context lẫn khi xếp KEY. Lý do (data pack): căn lẻ có priority tới 1,0 > mặc định T2 0,5, nên câu hỏi "vì sao tòa X…" trả 5 căn lẻ thay vì phân bố nguyên nhân của tòa. | TẠM (cần PO duyệt) |
+| P4-7 | T7 ở phạm vi ZONE/PROJECT: PEER_SAMPLE_CONSTRAINED / PEER_DATA_MISSING gộp 1 candidate cho mỗi zone/project kèm số căn (slot `units`); phạm vi UNIT vẫn từng căn. Lý do (data pack): 52 căn bị giới hạn peer ở The Sapphire 1; T7 luôn được giữ nên chiếm hết 40 chỗ context. | CHỐT (kỹ thuật) |
+| P4-8 | `narrative_mode = TEMPLATE` khi có dù chỉ 1 item rơi về mẫu (P2). `producer.model_id` vẫn ghi model khi có item do LLM viết, và câu trả lời ghi "LLM (…), một phần dùng mẫu cố định". | CHỐT (kỹ thuật) |
+| P4-9 | claim_binder bỏ từ đơn vị lặp ngay sau slot số (model viết `{{peers}} căn`, giá trị đã là "12 căn"). Thấy trong live 29/09. | CHỐT (kỹ thuật) |
+| P4-10 | Câu hỏi cấp tòa trên data pack (40 candidate): 2/10 item vẫn vi phạm E10 sau repair → 2 item đó dùng mẫu. Sửa prompt cần tăng `prompt_version` và chạy lại TC-01→TC-33, nên để sau P4. | MỞ |
+| P4-11 | D-18 `compact()` tất định: câu hỏi + `artifact_id`, cắt ở 2.000 ký tự. D-40/D-42: chỉ ghi INSIGHT_REF và TOPIC_SUMMARY tất định (gom subject + mã nguyên nhân khi quá 20 ref), không ghi USER_PREF, không có job LLM `MEMORY`. | CHỐT (theo đề xuất) |
+| P4-12 | D-50: sự kiện `INSIGHT_*` là 1 dòng JSON qua logger `vdagent.plugin.vdagent_insight` (= `api.log`); `LlmUsage` lưu thêm trong bảng `insight_llm_usage`. | CHỐT (theo đề xuất) |
+| P4-13 | D-17: đã xóa agent LangChain (`legacy_agent`/`CtxBridge`/`MemoryMiddleware`, `tests/test_agent.py`, prompt cũ), bỏ `langchain*`, `mcp` khỏi `pyproject.toml`; `tools.py`, `mcp_client.py` giữ nguyên, không import. **Chưa sửa** `README.md` gốc và `agents/_template/README.md` (vẫn lấy insight làm ví dụ LangChain) và prompt Orchestrator (D-10). | README + Orchestrator: MỞ |
+| P4-14 | Backend thật (`uv run uvicorn vdagent_backend.app:app`): plugin insight load được. Orchestrator, data, compare, report không load vì thiếu `.env` của chúng, nên demo gửi thẳng `POST /api/agents/insight/messages`, không qua Orchestrator. | Ghi nhận |
+
 ## Phase 3 (LLM adapters, pre-flight, repair, cost)
 
 | # | Quyết định / giả định | Trạng thái |
@@ -82,7 +101,7 @@ Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egr
 | P3-1 | Schema gửi provider (D-34): sinh từ Pydantic, inline `$ref`, mọi object đóng + mọi field `required` (optional → nullable), bỏ `title`/`default`/giới hạn độ dài; Pydantic kiểm đầy đủ sau khi nhận. | CHỐT (kỹ thuật) |
 | P3-2 | Phân loại lỗi (D-35): timeout, 429, 5xx, lỗi mạng → E08 (retry 1 lần sau 1 s → OpenAI → TEMPLATE); 400, safety, hết token, JSON sai schema → E09 → 1 lần repair tới **provider vừa trả lời** (reasoning low) → TEMPLATE theo item. | CHỐT |
 | P3-3 | TC-18 thực hiện theo D-35: Gemini lỗi 2 lần (1 + 1 retry), OpenAI 503 → TEMPLATE (spec ghi "3 lần"). | Chờ cập nhật spec |
-| P3-4 | Prompt v2 ở `prompts/v2/` (bản LangChain cũ còn đọc `prompts/system.md` tới P4). `prompt_version` ghi trong file prompt phải khớp `config/llm.yaml` (có test). Hiện `insight-prompt-1.2.0`. | TẠM (P4 chuyển về `prompts/`) |
+| P3-4 | Prompt v2 ở `prompts/` (P4 đã chuyển từ `prompts/v2/`). `prompt_version` ghi trong file prompt phải khớp `config/llm.yaml` (có test). Hiện `insight-prompt-1.2.0`. | CHỐT |
 | P3-5 | (Chuẩn hóa ngoặc được chấp nhận, **đếm và log** `INSIGHT_SLOT_NAME_NORMALISED`.) Trong prompt, candidate mang mã ngắn `c1`, `c2`… kèm danh sách `refs` hợp lệ; câu trả lời được đổi về id thật trước khi validate. Lý do (live 29/09): id dài làm Gemini vượt `max_output_tokens`; model đoán sai ref (`.cause` thay cho `.cause_label`) và ghi tên slot có ngoặc `{{…}}` (được chuẩn hóa). | CHỐT (kỹ thuật) |
 | P3-6 | Model được yêu cầu để `skipped` rỗng; hệ thống tự ghi LLM_SKIPPED (giảm output token). | TẠM |
 | P3-7 | Test live chỉ chạy khi `INSIGHT_LIVE=1` **và** có key (tránh tốn tiền/không ổn định trong test thường, commit gate và CI). | TẠM |

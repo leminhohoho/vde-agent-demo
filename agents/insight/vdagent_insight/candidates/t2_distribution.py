@@ -10,8 +10,8 @@ to 1, extreme DOM outliers removed) and reports **both** methods:
 A candidate per allowed cause with `weighted_share ≥ min_cause_share_pct`, largest first; smaller
 ones are rejected CAUSE_SHARE_TOO_SMALL, unknown codes CAUSE_CODE_NOT_ALLOWED (BR-02; their weight
 still counts in the total). Coverage below `low_min` → no conclusion at that level
-(INSUFFICIENT_COVERAGE), n_eff below `describe_min` → GROUP_TOO_SMALL (spec §5.5). T2 makes no
-statistical comparison, so `significant` is always false.
+(INSUFFICIENT_COVERAGE). A small n_eff only flags the candidate (SMALL_SAMPLE / GROUP_TOO_SMALL,
+describe only, D-71). T2 makes no statistical comparison, so `significant` is always false.
 """
 
 from __future__ import annotations
@@ -115,9 +115,8 @@ def t2_candidates(ctx: CandidateContext) -> CandidateBatch:
     for scope in requested_scopes(ctx):
         if scope.overdue_units == 0:
             continue
-        blocker = scope.coverage if scope.coverage.excluded else scope.sample if scope.sample.excluded else None
-        if blocker is not None and blocker.flag:
-            batch.reject(f"C-T2-{scope.id}", blocker.flag)
+        if scope.coverage.excluded and scope.coverage.flag:
+            batch.reject(f"C-T2-{scope.id}", scope.coverage.flag)
             continue
         for share in cause_distribution(ctx, scope):
             candidate_id = f"C-T2-{scope.id}-{share.cause_code}"

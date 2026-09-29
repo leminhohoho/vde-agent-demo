@@ -46,7 +46,7 @@ def test_tc23_excluded_secondary_field_and_mnar_are_reported() -> None:
         missing_rate_sold_pct="5",
     )
     ctx = context(healthy(), dq([field]), tasks=TASKS)
-    c = by_id(t7_candidates(ctx).candidates)["C-T7-DQ-fact_unit_inventory_snapshot.spiff_bonus_vnd"]
+    c = by_id(t7_candidates(ctx).candidates)["C-T7-DQ-fact_unit_inventory_snapshot-spiff_bonus_vnd"]
     assert (c.task, c.insight_type) == ("T7", "DATA_LIMITATION")
     assert c.dq_flags == ["FIELD_EXCLUDED", "MISSING_NOT_RANDOM"]
     assert (c.slots["missing_rate"].value, c.slots["mnar_gap"].value) == (Decimal(45), Decimal(25))

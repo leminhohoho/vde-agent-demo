@@ -17,6 +17,8 @@ from config (spec 6.2 table):
   `unit_examples_per_cause` longest-unsold units are kept, the rest rejected UNITS_GROUPED (T2
   still counts them).
 - Outlying DOM within the unit's zone is flagged (OUTLIER_WARN / OUTLIER_EXCLUDED), never dropped.
+- D-74: the bridge `evidence_artifact_id` goes to `lineage.source_refs` as `artifact:<id>`, never to
+  the evidence (that artifact is not in the data pack).
 """
 
 from __future__ import annotations
@@ -181,7 +183,8 @@ def _unit_candidate(
         slots=slots,
         evidence=evidence,
         lineage=CandidateLineage(
-            source_refs=[ctx.source(t) for t in tables],
+            source_refs=[ctx.source(t) for t in tables]
+            + ([f"artifact:{row.evidence_artifact_id}"] if row.evidence_artifact_id else []),
             calculation_refs=[ctx.calculation(INVENTORY, "unsold_days_dom")] + [ctx.calculation(s.table, s.field) for s in bound],
         ),
         severity_rank=row.severity_rank,

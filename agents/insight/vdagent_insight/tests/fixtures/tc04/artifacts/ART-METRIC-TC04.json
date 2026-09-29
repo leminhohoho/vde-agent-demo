@@ -4,7 +4,7 @@
   "version": 1,
   "status": "VALID",
   "snapshot_id": "SNAP-20260630-01",
-  "semantic_config_version": "sem-2026-09-29",
+  "semantic_config_version": "3.1.0",
   "payload": {
     "metrics": [
       {
@@ -12,8 +12,8 @@
         "calculation_ref": "metric.units_in_scope@1",
         "subject": {
           "type": "project",
-          "id": "PRJ-X",
-          "label": "Dự án X"
+          "id": "PRJ-VHOP-BEVERLY",
+          "label": "Vinhomes Ocean Park - The Beverly"
         },
         "value": "20",
         "unit": "COUNT",
@@ -24,10 +24,10 @@
         "calculation_ref": "metric.overdue_units@1",
         "subject": {
           "type": "project",
-          "id": "PRJ-X",
-          "label": "Dự án X"
+          "id": "PRJ-VHOP-BEVERLY",
+          "label": "Vinhomes Ocean Park - The Beverly"
         },
-        "value": "3",
+        "value": "20",
         "unit": "COUNT",
         "n": 20
       },
@@ -36,10 +36,10 @@
         "calculation_ref": "dw.unsold_days_dom@3.1.0",
         "subject": {
           "type": "unit",
-          "id": "U011",
-          "label": "A-05.03"
+          "id": "U01441",
+          "label": "BEVERLY-24.001"
         },
-        "value": "120",
+        "value": "334",
         "unit": "DAY"
       },
       {
@@ -47,10 +47,10 @@
         "calculation_ref": "dw.unsold_days_dom@3.1.0",
         "subject": {
           "type": "unit",
-          "id": "U012",
-          "label": "A-05.04"
+          "id": "U01442",
+          "label": "BEVERLY-27.002"
         },
-        "value": "130",
+        "value": "128",
         "unit": "DAY"
       },
       {
@@ -58,10 +58,197 @@
         "calculation_ref": "dw.unsold_days_dom@3.1.0",
         "subject": {
           "type": "unit",
-          "id": "U013",
-          "label": "A-06.01"
+          "id": "U01443",
+          "label": "BEVERLY-01.003"
         },
-        "value": "140",
+        "value": "394",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01444",
+          "label": "BEVERLY-29.004"
+        },
+        "value": "282",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01445",
+          "label": "BEVERLY-06.005"
+        },
+        "value": "243",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01446",
+          "label": "BEVERLY-21.006"
+        },
+        "value": "176",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01447",
+          "label": "BEVERLY-06.007"
+        },
+        "value": "253",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01448",
+          "label": "BEVERLY-22.008"
+        },
+        "value": "229",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01449",
+          "label": "BEVERLY-03.009"
+        },
+        "value": "325",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01450",
+          "label": "BEVERLY-21.010"
+        },
+        "value": "299",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01451",
+          "label": "BEVERLY-19.011"
+        },
+        "value": "209",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01452",
+          "label": "BEVERLY-28.012"
+        },
+        "value": "286",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01453",
+          "label": "BEVERLY-03.013"
+        },
+        "value": "325",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01454",
+          "label": "BEVERLY-26.014"
+        },
+        "value": "392",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01455",
+          "label": "BEVERLY-10.015"
+        },
+        "value": "385",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01456",
+          "label": "BEVERLY-22.016"
+        },
+        "value": "367",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01457",
+          "label": "BEVERLY-20.017"
+        },
+        "value": "383",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01458",
+          "label": "BEVERLY-14.018"
+        },
+        "value": "324",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01459",
+          "label": "BEVERLY-22.019"
+        },
+        "value": "257",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U01460",
+          "label": "BEVERLY-11.020"
+        },
+        "value": "122",
         "unit": "DAY"
       }
     ]

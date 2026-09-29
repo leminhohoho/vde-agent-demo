@@ -1,0 +1,5 @@
+channel_key,channel_id,channel_name,channel_tier,active_brokers_count
+201,AGENCY-CENLAND,Cen Land,TIER_1_EXCLUSIVE,120
+202,AGENCY-EXPRESS,Vinhomes Express,INHOUSE,80
+203,AGENCY-GENERAL1,Sang BDS General,TIER_2_GENERAL,60
+204,AGENCY-GENERAL2,Dai Phong Land,TIER_2_GENERAL,45

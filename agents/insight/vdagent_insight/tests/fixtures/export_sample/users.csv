@@ -1,0 +1,5 @@
+user_id,username,email,full_name,role,is_active,created_at
+usr_sales_ops_01,sales_ops_01,ops1@vdagent.local,Sales Ops 1,sales_ops,True,2026-01-01T00:00:00+07:00
+usr_sales_ops_02,sales_ops_02,ops2@vdagent.local,Sales Ops 2,sales_ops,True,2026-01-01T00:00:00+07:00
+usr_manager_01,manager_01,mgr1@vdagent.local,Sales Manager 1,sales_manager,True,2026-01-01T00:00:00+07:00
+usr_eval_01,eval_01,eval1@vdagent.local,Evaluator 1,evaluator,True,2026-01-01T00:00:00+07:00

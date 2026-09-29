@@ -64,6 +64,32 @@ Chi tiết và số liệu: `docs/INSIGHT_P2_P5_DECISIONS.md` (mục "Quyết đ
 | Q16 | Data pack xác nhận NULL của `spiff_bonus_vnd` có nghĩa. | ĐÓNG |
 | TC | TC-01 → `SAPPHIRE1-16.231`; TC-04 → The Beverly. | ĐÃ CHỐT |
 
+## Phase 2 (validation, render, TEMPLATE, assess): mặc định đã áp dụng
+
+Các mục D chưa được chốt riêng; coding agent làm theo **đề xuất mặc định** trong
+`docs/INSIGHT_P2_P5_DECISIONS.md`. Câu chữ nằm trong `config/semantic_insight.yaml` (`language`) và là
+**bản nháp chờ Sales Ops duyệt**.
+
+| # | Mặc định đang chạy | Trạng thái |
+|---|---|---|
+| D-20 | Thông điệp tiếng Việt cho 25 mã limitation; câu TEMPLATE mỗi cause có `{{cause_label}}` (để TC-30 hiện đúng `cause_label_vi`); câu `peer_hidden_template` khi < 3 peer. | TẠM (OPS duyệt) |
+| D-21 | GR-01: chữ số + danh sách `quantity_words`; không bắt "một", "hai"… đứng một mình. | TẠM (DA/OPS) |
+| D-22 | Slot nhãn cố định (`label_slots`); slot khác phải là slot số của candidate (GR-03). | TẠM |
+| D-23 | GR-05: quét `question_normalized` và nhãn theo `injection_patterns`; khớp → sự kiện bảo mật, dữ liệu giữ nguyên (TC-15: output không đổi). | TẠM |
+| D-24 | GR-06: khuyến nghị phải bắt đầu "Đề xuất"/"Có thể cân nhắc", không chứa `imperative_phrases`. | TẠM (OPS) |
+| D-25 | GR-07: `strong_comparison_phrases` chỉ khi mọi candidate của item `significant`; mã limitation do code tự gắn. | TẠM (DA/OPS) |
+| D-26 | GR-08: câu phải có dấu tiếng Việt, không có từ trong `english_stopwords` (trừ whitelist), không có mã cause; item nói về nguyên nhân phải dùng `{{cause_label}}`. | TẠM |
+| D-27 | Gộp nhiều candidate: `candidate_id` = cái đầu, còn lại `candidate:<id>` trong lineage; confidence thấp nhất; `cause_code` chỉ khi chung. | TẠM (PO nếu muốn đổi contract) |
+| D-28 | KEY: ROOT_CAUSE_SIGNAL, CAUSE_DISTRIBUTION, PATTERN có `significant`; có evidence, đủ 2 nhánh lineage, confidence ≠ LOW, không CONFLICT; tối đa `max_key_insights`, LEGAL đứng đầu headline. | TẠM |
+| D-31 | `kind`: dq → DQ, metric / số tự tính (`insight_candidates`) → METRIC, market → MARKET, dòng dataset → DIAGNOSTIC_ROW. | TẠM |
+| D-32 | Candidate LLM bỏ qua → `LLM_SKIPPED`; T7 bị bỏ qua vẫn được render TEMPLATE; không có draft → TEMPLATE mọi T7 + tối đa 12 candidate khác, phần còn lại `SELECTION_LIMIT`. | TẠM |
+| D-33 | Khuyến nghị: câu của LLM nếu qua GR-06, không thì câu trong config; không có với intent PERFORMANCE_METRIC_LOOKUP hoặc khi người dùng tắt. | TẠM |
+| D-13 | `chart_hints` (KEY có số): ROOT_CAUSE_SIGNAL → `kpi_card`, CAUSE_DISTRIBUTION → `stacked_bar`, PATTERN → `bar`, MARKET_CONTEXT → `line`. | TẠM |
+| P2-1 | `narrative_mode = TEMPLATE` khi không có draft hoặc có item phải fallback; T7 được bổ sung bằng TEMPLATE không tính. | TẠM |
+| P2-2 | Status PARTIAL khi: TEMPLATE, candidate bị loại vì thiếu bằng chứng (EVIDENCE_FIELD_MISSING/PEER_DATA_MISSING), có CONFLICT, thiếu market_context. Candidate có nhưng không render được gì → INVALID. | TẠM |
+| P2-3 | Id candidate không chứa dấu chấm (ref của draft là `<candidate_id>.<slot>`); id DQ trong T7 = `C-T7-DQ-<table>-<field>`. | CHỐT (kỹ thuật) |
+| P2-4 | `Insight.limitations` = thông điệp tiếng Việt; mã nằm ở `payload.limitations[].code` kèm `affected`. | TẠM |
+
 ## Giả định đặt trong Phase 0
 
 Xem `agents/insight/config/semantic_insight.yaml` (mọi giá trị có `status: PENDING`) và mục "Giả định"

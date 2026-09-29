@@ -1,8 +1,9 @@
-"""Mock snapshot for TC-01 (spec §11.2): 1 project, 20 units, 1 overdue unit A-05.03 (DOM 145,
-OVERPRICED_VS_PEER rank 1, score 1.000). Column names follow DW Schema v3.1.0.
+"""Fixture for TC-01 (spec §11.2), built from the data pack sample: the 61 sampled units of
+The Sapphire 1, target SAPPHIRE1-16.231 (overdue, OVERPRICED_VS_PEER rank 1 with 0.60 and
+LOW_SALES_INCENTIVE rank 2 with 0.400, 12 unconstrained peers). Column names follow DW v3.1.0.
 
-TODO(data-agent-contract): the payload shapes of `metric`, `dq`, `dataset` are ours until the Data
-Agent spec defines them.
+TODO(data-agent-contract): the payload shapes of `metric` and `dq` are ours until the Data Agent
+spec defines them.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ async def tc01_artifact(artifact_type: str) -> InputArtifact:
 async def test_every_ref_resolves_with_its_hash_snapshot_and_config_version() -> None:
     req = tc01_request()
     reader = FixtureArtifactReader(TC01 / "artifacts")
-    assert req.semantic_config_version == load_semantic_config(CONFIG_DIR / "semantic_insight.yaml").version
+    assert req.semantic_config_version == load_semantic_config(CONFIG_DIR / "semantic_insight.yaml").version == "3.1.0"
     types = set()
     for ref in req.input_artifact_refs:
         art = await reader.read(ref.artifact_id)
@@ -41,35 +42,41 @@ async def test_every_ref_resolves_with_its_hash_snapshot_and_config_version() ->
     assert types == {"metric", "dq", "dataset"}
 
 
-async def test_dataset_has_one_project_twenty_units_and_exactly_one_overdue_unit() -> None:
+async def test_dataset_is_one_tower_with_the_target_unit_overdue() -> None:
     dataset = DatasetPayload.model_validate((await tc01_artifact("dataset")).payload)
     threshold = load_semantic_config(CONFIG_DIR / "semantic_insight.yaml").params.overdue_threshold_days
-    assert len(dataset.dim_project_profile) == 1
-    assert len(dataset.dim_unit_master) == len(dataset.fact_unit_inventory_snapshot) == 20
+    assert [p.project_id for p in dataset.dim_project_profile] == ["PRJ-VHOP"]
+    assert [z.zone_id for z in dataset.dim_zone_master] == ["ZN-SAPPHIRE1"]
+    assert len(dataset.dim_unit_master) == len(dataset.fact_unit_inventory_snapshot) == 61
     for row in dataset.fact_unit_inventory_snapshot:
         assert row.is_overdue_flag == (row.inventory_status == "AVAILABLE" and row.unsold_days_dom > threshold)
-    (overdue,) = [r for r in dataset.fact_unit_inventory_snapshot if r.is_overdue_flag]
-    (unit,) = [u for u in dataset.dim_unit_master if u.unit_key == overdue.unit_key]
-    assert (unit.unit_id, unit.unit_code, overdue.unsold_days_dom) == ("U011", "A-05.03", 145)
-    statuses = {r.inventory_status for r in dataset.fact_unit_inventory_snapshot}
-    assert statuses == {"AVAILABLE", "BOOKED", "SOLD"}
+    (unit,) = [u for u in dataset.dim_unit_master if u.unit_code == "SAPPHIRE1-16.231"]
+    (inv,) = [r for r in dataset.fact_unit_inventory_snapshot if r.unit_key == unit.unit_key]
+    assert (unit.unit_id, inv.inventory_status, inv.unsold_days_dom) == ("U00231", "AVAILABLE", 143)
 
 
-async def test_the_overdue_unit_is_diagnosed_overpriced_vs_peer_only() -> None:
+async def test_the_target_unit_is_diagnosed_overpriced_first() -> None:
     dataset = DatasetPayload.model_validate((await tc01_artifact("dataset")).payload)
-    (diag,) = dataset.dm_unit_friction_diagnostics
-    assert (diag.unit_code, diag.unsold_days_dom, diag.primary_cause_code) == ("A-05.03", 145, "OVERPRICED_VS_PEER")
-    assert diag.recommended_action == "TARGETED_PRICE_CORRECTION"
-    assert diag.price_spread_vs_peer_pct == Decimal("12.40")
-    assert diag.physical_defect_penalty == 5 and diag.is_peer_sample_constrained is False and diag.peer_count >= 10
-    (cause,) = dataset.unit_diagnostic_causes
-    assert (cause.diagnostic_id, cause.cause_code, cause.severity_rank) == (diag.diagnostic_id, "OVERPRICED_VS_PEER", 1)
-    assert cause.attribution_score == Decimal("1.000")
+    (diag,) = [d for d in dataset.dm_unit_friction_diagnostics if d.unit_code == "SAPPHIRE1-16.231"]
+    assert (diag.unsold_days_dom, diag.primary_cause_code, diag.recommended_action) == (
+        143,
+        "OVERPRICED_VS_PEER",
+        "TARGETED_PRICE_CORRECTION",
+    )
+    assert diag.price_spread_vs_peer_pct == Decimal("19.82")
+    assert (diag.peer_count, diag.is_peer_sample_constrained) == (12, False)
+    causes = sorted(
+        (c for c in dataset.unit_diagnostic_causes if c.diagnostic_id == diag.diagnostic_id), key=lambda c: c.severity_rank
+    )
+    assert [(c.cause_code, c.severity_rank, c.attribution_score) for c in causes] == [
+        ("OVERPRICED_VS_PEER", 1, Decimal("0.60")),
+        ("LOW_SALES_INCENTIVE", 2, Decimal("0.400")),
+    ]
 
 
 async def test_dq_passes_and_metrics_back_the_claim_numbers() -> None:
     dq = DqPayload.model_validate((await tc01_artifact("dq")).payload)
     assert dq.overall_status == "PASS" and all(f.status == "PASS" for f in dq.fields)
     metrics = MetricPayload.model_validate((await tc01_artifact("metric")).payload)
-    dom = [m for m in metrics.metrics if m.metric_id == "unsold_days_dom" and m.subject.id == "U011"]
-    assert [m.value for m in dom] == [Decimal("145")]
+    dom = [m for m in metrics.metrics if m.metric_id == "unsold_days_dom" and m.subject.id == "U00231"]
+    assert [m.value for m in dom] == [Decimal("143")]

@@ -91,12 +91,12 @@ def test_coverage_tiers_at_and_around_each_bound(pct: str, expected: Tier) -> No
 @pytest.mark.parametrize(
     ("n", "expected"),
     [
-        (11, Tier()),
-        (10, Tier()),
-        (9, Tier("SMALL_SAMPLE", describe_only=True)),
-        (6, Tier("SMALL_SAMPLE", describe_only=True)),
-        (5, Tier("SMALL_SAMPLE", describe_only=True)),
-        (4, Tier("GROUP_TOO_SMALL", excluded=True)),
+        (12, Tier()),
+        (6, Tier()),
+        (5, Tier()),
+        (4, Tier("SMALL_SAMPLE", describe_only=True)),
+        (3, Tier("SMALL_SAMPLE", describe_only=True)),
+        (2, Tier("GROUP_TOO_SMALL", excluded=True)),
         (0, Tier("GROUP_TOO_SMALL", excluded=True)),
     ],
 )

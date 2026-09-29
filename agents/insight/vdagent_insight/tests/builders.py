@@ -122,7 +122,7 @@ def diagnostic(i: int, dom: int, primary: str = "OVERPRICED_VS_PEER", action: st
     return DiagnosticRow.model_validate({**data, **kw})
 
 
-def cause(i: int, code: str, rank: int = 1, score: str = "1.000") -> CauseRow:
+def cause(i: int, code: str, rank: int = 1, score: str = "1.000", evidence_artifact_id: str | None = None) -> CauseRow:
     return CauseRow.model_validate(
         {
             "diagnostic_id": f"DIAG-{DATE_KEY}-U{i:03d}",
@@ -131,6 +131,7 @@ def cause(i: int, code: str, rank: int = 1, score: str = "1.000") -> CauseRow:
             "snapshot_date_key": DATE_KEY,
             "severity_rank": rank,
             "attribution_score": score,
+            "evidence_artifact_id": evidence_artifact_id,
         }
     )
 

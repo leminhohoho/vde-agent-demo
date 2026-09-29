@@ -32,7 +32,8 @@ vdagent_insight/
   view.py       join dataset theo căn, BR-01  formatting.py  hiển thị số vi-VN               [3, 4, 8]
   gate.py       Sufficiency Gate 5.5          candidates/   T1 T2 T3 T5 T7, stats, priority   [3, 4, 5]
   llm/          LlmClient, Fake, gemini, openai, preflight, usage                             [5, 6, R]
-  validation.py GR-01→08                      render.py  claim_binder, vi-VN, TEMPLATE       [7, 8]
+  validation.py GR-01→08 + quét injection     render.py  claim_binder, nhãn, TEMPLATE        [7, 8]
+  narrate.py    áp draft từng item, fallback TEMPLATE, LLM_SKIPPED                              [7, 8]
   assess.py     confidence, KEY, status       memory.py  InsightMemory, NoOpMemory           [2, 9, 10]
   prompts/      system, repair, extract, compact
   tests/        test_*.py, builders.py, fixtures/tcNN/ (request.json + artifacts/*.json [+ config/])

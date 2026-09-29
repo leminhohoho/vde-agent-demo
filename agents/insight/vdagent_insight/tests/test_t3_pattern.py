@@ -64,10 +64,19 @@ def test_br08_small_effect_is_rejected() -> None:
     assert ("C-T3-balcony_orientation-W", "EFFECT_TOO_SMALL") in reasons
 
 
-def test_groups_of_five_to_nine_are_describe_only() -> None:
-    data = orientation_dataset({"W": [200, 210, 220, 230, 240, 250], "E": list(range(20, 60, 2))})
-    c = by_id(t3_candidates(context(data, tasks=TASKS, analysis_scope=PROJECT)).candidates)["C-T3-balcony_orientation-W"]
+def test_groups_of_three_or_four_are_describe_only_and_five_may_compare() -> None:
+    four = orientation_dataset({"W": [200, 210, 220, 230], "E": list(range(20, 60, 2))})
+    c = by_id(t3_candidates(context(four, tasks=TASKS, analysis_scope=PROJECT)).candidates)["C-T3-balcony_orientation-W"]
     assert "SMALL_SAMPLE" in c.dq_flags and c.significant is False
+    five = orientation_dataset({"W": [200, 210, 220, 230, 240], "E": list(range(20, 60, 2))})
+    c = by_id(t3_candidates(context(five, tasks=TASKS, analysis_scope=PROJECT)).candidates)["C-T3-balcony_orientation-W"]
+    assert "SMALL_SAMPLE" not in c.dq_flags
+
+
+def test_groups_under_three_are_dropped() -> None:
+    data = orientation_dataset({"W": [70, 72], "E": list(range(20, 60, 2))})
+    batch = t3_candidates(context(data, tasks=TASKS, analysis_scope=PROJECT))
+    assert ("C-T3-balcony_orientation-W", "GROUP_TOO_SMALL") in [(r.candidate_id, r.reason_code) for r in batch.rejected]
 
 
 def test_only_unsold_inventory_is_compared() -> None:

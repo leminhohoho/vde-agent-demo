@@ -12,6 +12,7 @@ the offending key. `SemanticConfigRegistry` serves each semantic_config version,
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -20,10 +21,10 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from vdagent_sdk import PluginConfigError
 
-from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, ProjectRow, UnitRow
+from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, MacroRow, ProjectRow, UnitRow
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"  # agents/<name>/.env
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"  # agents/<name>/config
@@ -151,12 +152,18 @@ class PriorityWithoutRank(_Config):
 class SemanticParams(_Config):
     overdue_threshold_days: int
     peer_area_tolerance_pct: Dec
+    """Percent (10 = ±10%), as in the DW."""
     peer_tiers: PeerTiers
-    physical_defect_trigger: int
-    thermal_penalty_trigger: int
-    subsidy_min_months: int
-    funnel_dropoff_trigger_pct: Dec
-    low_commission_max_pct: Dec
+    min_peer_count: int
+    severe_defect_penalty_min: int
+    thermal_penalty_min: int
+    subsidy_support_min_mo: int
+    funnel_dropoff_threshold_pct: Dec
+    low_commission_threshold_pct: Dec
+    peer_spread_threshold_pct: Dec
+    secondary_gap_threshold_pct: Dec
+    lump_sum_ticket_ratio_threshold: Dec
+    defect_neutral_max: int
     missing_rate_tiers: MissingRateTiers
     coverage_tiers: CoverageTiers
     min_group_size: int
@@ -230,6 +237,62 @@ class PatternDimension(_Config):
     table: Literal["dim_unit_master", "fact_unit_inventory_snapshot"]
 
 
+class MarketMetric(_Config):
+    """One T5 metric of fact_market_macro_monthly (D-72)."""
+
+    slot: str
+    column: str
+    unit: BindingUnit
+    noun: str | None = None
+    trend: bool
+    """True: latest vs first month of the window; False: latest level only (inferred in the DW)."""
+
+
+class LanguageConfig(_Config):
+    """Catalogues of the validator and the renderer (spec 5.3 GR-01..GR-08, 8.2; D-20..D-26, D-73)."""
+
+    label_slots: tuple[str, ...]
+    quantity_words: tuple[str, ...]
+    strong_comparison_phrases: tuple[str, ...]
+    imperative_phrases: tuple[str, ...]
+    recommendation_prefixes: tuple[str, ...]
+    english_stopwords: tuple[str, ...]
+    injection_patterns: tuple[str, ...]
+    unit_code_pattern: str
+    max_words: int = Field(gt=0)
+    permit_status_labels: dict[Literal["permit", "guarantee", "both"], str]
+    peer_hidden_template: str
+    chart_hints: dict[str, str]
+    limitation_messages: dict[str, str]
+
+    @field_validator(
+        "quantity_words", "strong_comparison_phrases", "imperative_phrases", "recommendation_prefixes", "english_stopwords"
+    )
+    @classmethod
+    def _normalised(cls, phrases: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(normalize_phrase(p) for p in phrases)
+
+    @field_validator("injection_patterns")
+    @classmethod
+    def _patterns_compile(cls, patterns: tuple[str, ...]) -> tuple[str, ...]:
+        for p in patterns:
+            _compile(p, "injection_patterns")
+        return patterns
+
+    @field_validator("unit_code_pattern")
+    @classmethod
+    def _unit_code_compiles(cls, pattern: str) -> str:
+        _compile(pattern, "unit_code_pattern")
+        return pattern
+
+
+def _compile(pattern: str, key: str) -> None:
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"{key}: invalid regex {pattern!r}: {exc}") from None
+
+
 class _SemanticRaw(_Config):
     version: str = Field(min_length=1)
     params: dict[str, _ParamEntry]
@@ -238,6 +301,8 @@ class _SemanticRaw(_Config):
     forbidden_phrases: list[str]
     english_whitelist: list[str]
     pattern_dimensions: list[PatternDimension]
+    market_metrics: list[MarketMetric]
+    language: LanguageConfig
 
 
 class _SemanticFile(_Config):
@@ -254,6 +319,8 @@ class SemanticConfig(_Config):
     """NFC + lowercase, ready for GR-02 matching."""
     english_whitelist: tuple[str, ...]
     pattern_dimensions: tuple[PatternDimension, ...]
+    market_metrics: tuple[MarketMetric, ...]
+    language: LanguageConfig
 
     @property
     def allowed_cause_codes(self) -> frozenset[str]:
@@ -288,6 +355,18 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         for spec in (*entry.required_evidence, *entry.supplementary_evidence):
             if spec.field not in EVIDENCE_TABLE_MODELS[spec.table].model_fields:
                 raise ConfigError(f"{path.name}: {entry.cause_code}: {spec.table} has no column {spec.field}")
+    tiers = params.peer_tiers
+    if tiers.compare_min != params.min_peer_count:
+        raise ConfigError(
+            f"{path.name}: peer_tiers.compare_min ({tiers.compare_min}) must equal min_peer_count ({params.min_peer_count})"
+        )
+    if params.min_group_size != tiers.describe_min:
+        raise ConfigError(
+            f"{path.name}: min_group_size ({params.min_group_size}) must equal peer_tiers.describe_min ({tiers.describe_min})"
+        )
+    for metric in raw.market_metrics:
+        if metric.column not in MacroRow.model_fields:
+            raise ConfigError(f"{path.name}: market metric: fact_market_macro_monthly has no column {metric.column}")
     for dim in raw.pattern_dimensions:
         if dim.name not in PATTERN_TABLE_MODELS[dim.table].model_fields:
             raise ConfigError(f"{path.name}: pattern dimension: {dim.table} has no column {dim.name}")
@@ -300,6 +379,8 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         forbidden_phrases=tuple(normalize_phrase(p) for p in raw.forbidden_phrases),
         english_whitelist=tuple(raw.english_whitelist),
         pattern_dimensions=tuple(raw.pattern_dimensions),
+        market_metrics=tuple(raw.market_metrics),
+        language=raw.language,
     )
 
 

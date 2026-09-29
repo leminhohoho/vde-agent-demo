@@ -130,9 +130,11 @@ def test_br07_peer_tiers_and_constrained_sample() -> None:
     (constrained,) = t1_candidates(context(single_unit(is_peer_sample_constrained=True))).candidates
     assert constrained.confidence == "MEDIUM" and "PEER_SAMPLE_CONSTRAINED" in constrained.dq_flags
     assert constrained.significant is False
-    (few,) = t1_candidates(context(single_unit(peer_count=7))).candidates
+    (enough,) = t1_candidates(context(single_unit(peer_count=5))).candidates
+    assert enough.significant is True and not {"SMALL_SAMPLE", "GROUP_TOO_SMALL"} & set(enough.dq_flags)
+    (few,) = t1_candidates(context(single_unit(peer_count=4))).candidates
     assert "SMALL_SAMPLE" in few.dq_flags and few.significant is False
-    (tiny,) = t1_candidates(context(single_unit(peer_count=3))).candidates
+    (tiny,) = t1_candidates(context(single_unit(peer_count=2))).candidates  # kept: only T3 drops (D-71)
     assert "GROUP_TOO_SMALL" in tiny.dq_flags and tiny.significant is False
 
 
@@ -215,3 +217,10 @@ def test_an_outlying_dom_in_the_zone_is_flagged_but_kept() -> None:
     batch = t1_candidates(context(dataset(units, inv, diags, causes)))
     flagged = {c.subject.id: [f for f in c.dq_flags if f.startswith("OUTLIER")] for c in batch.candidates}
     assert flagged == {"U001": [], "U002": [], "U003": [], "U004": [], "U005": ["OUTLIER_EXCLUDED"]}
+
+
+def test_d74_the_bridge_evidence_artifact_goes_to_lineage_only() -> None:
+    data = single_unit(causes=[cause(11, "OVERPRICED_VS_PEER", evidence_artifact_id="ART-OVERPRICED_VS_PEER-U011")])
+    (c,) = t1_candidates(context(data)).candidates
+    assert "artifact:ART-OVERPRICED_VS_PEER-U011" in c.lineage.source_refs
+    assert not any("ART-OVERPRICED_VS_PEER-U011" in ref for ref in c.evidence_refs)

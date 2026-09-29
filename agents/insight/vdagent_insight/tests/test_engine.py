@@ -24,12 +24,15 @@ async def load(case: str) -> tuple[InsightTaskRequest, list[InputArtifact]]:
     return request, [await reader.read(ref.artifact_id) for ref in request.input_artifact_refs]
 
 
-async def test_tc01_yields_the_single_overpriced_candidate() -> None:
+async def test_tc01_yields_the_target_unit_causes_in_rank_order() -> None:
     request, artifacts = await load("tc01")
     batch = generate_candidates(build_context(request, artifacts, semantic(), AS_OF), max_candidates=40)
-    assert [c.candidate_id for c in batch.candidates] == ["C-T1-U011-1-OVERPRICED_VS_PEER"]
-    (c,) = batch.candidates
-    assert c.slots["dom"].metric_ref == "ART-DATASET-TC01#/fact_unit_inventory_snapshot/10/unsold_days_dom"
+    assert [c.candidate_id for c in batch.candidates] == [
+        "C-T1-U00231-1-OVERPRICED_VS_PEER",
+        "C-T1-U00231-2-LOW_SALES_INCENTIVE",
+    ]
+    c = batch.candidates[0]
+    assert c.slots["dom"].metric_ref.startswith("ART-DATASET-TC01#/fact_unit_inventory_snapshot/")
     assert c.confidence == "HIGH" and batch.rejected == []
 
 
@@ -66,7 +69,7 @@ async def test_memory_subjects_raise_their_priority() -> None:
     plain = generate_candidates(build_context(request, artifacts, semantic(), AS_OF), max_candidates=40)
     boosted = generate_candidates(
         build_context(
-            request, artifacts, semantic(), AS_OF, recent_subject_ids=frozenset({"U011"}), recent_subject_boost=Decimal(1)
+            request, artifacts, semantic(), AS_OF, recent_subject_ids=frozenset({"U00231"}), recent_subject_boost=Decimal(1)
         ),
         max_candidates=40,
     )

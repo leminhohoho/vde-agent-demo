@@ -9,25 +9,27 @@
     "T6",
     "T7"
   ],
-  "question_normalized": "Vì sao dự án X bán chậm?",
+  "question_normalized": "Vì sao dự án The Beverly bán chậm?",
   "analysis_scope": {
     "level": "PROJECT",
     "project_ids": [
-      "PRJ-X"
+      "PRJ-VHOP-BEVERLY"
     ],
     "zone_ids": [],
     "unit_ids": []
   },
   "snapshot_id": "SNAP-20260630-01",
-  "semantic_config_version": "sem-2026-09-29",
+  "semantic_config_version": "3.1.0",
   "user_context": {
-    "user_id": "u_1",
+    "user_id": "usr_sales_ops_01",
     "role": "SALES_OPS",
     "authorized_scope": {
       "project_ids": [
-        "PRJ-X"
+        "PRJ-VHOP-BEVERLY"
       ],
-      "zone_ids": []
+      "zone_ids": [
+        "ZN-BEVERLY"
+      ]
     }
   },
   "input_artifact_refs": [
@@ -36,21 +38,21 @@
       "artifact_type": "metric",
       "version": 1,
       "status": "VALID",
-      "content_hash": "63246e0ec006457e1002b3ef4f7307f9f1a5f1e0b7118e5cab26b3070149499e"
+      "content_hash": "6b6db0dcbc529fe824e3c82242c18662e76436d0dbce228cd2e720b358355a10"
     },
     {
       "artifact_id": "ART-DQ-TC04",
       "artifact_type": "dq",
       "version": 1,
       "status": "VALID",
-      "content_hash": "ba15f1cb8be11ead026779c1dd2d0904098b799ce2c003aae0df0843f5c77a9a"
+      "content_hash": "07657512cb1b68bc9d4a6ad6b941905529b0414440dc0f7586052fee241f6ea2"
     },
     {
       "artifact_id": "ART-DATASET-TC04",
       "artifact_type": "dataset",
       "version": 1,
       "status": "VALID",
-      "content_hash": "c8a61d20f76e7df608f5fd128850add333124ee5a4c08eb511060c8f10b9115b"
+      "content_hash": "4995fed49fa753d8e158e43016e382ff11462097b58ba9b0a982d0cf4990c4a5"
     }
   ],
   "constraints": {

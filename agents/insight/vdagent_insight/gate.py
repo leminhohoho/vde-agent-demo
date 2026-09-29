@@ -82,7 +82,8 @@ def coverage_tier(coverage_pct: Decimal, tiers: CoverageTiers) -> Tier:
 
 
 def sample_tier(n_eff: int, tiers: PeerTiers) -> Tier:
-    """Peers / group size: ≥10 may compare (if significant), 5–9 describe only, <5 suppressed."""
+    """Peers / group size (D-71): ≥ compare_min may compare (if significant), ≥ describe_min describe
+    only, below → GROUP_TOO_SMALL (only T3 drops the group; T1/T2 keep the candidate flagged)."""
     if n_eff >= tiers.compare_min:
         return Tier()
     if n_eff >= tiers.describe_min:

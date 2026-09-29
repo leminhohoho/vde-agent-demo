@@ -27,6 +27,7 @@ async def test_noop_memory_loads_an_empty_context_and_forgets_what_is_saved() ->
 
 # ---- CtxMemory: agent memory over the sdk's ctx.memory (spec 9.5, D-40, D-42) --------------------
 
+import json  # noqa: E402
 from datetime import datetime, timedelta  # noqa: E402
 from typing import Any  # noqa: E402
 
@@ -145,3 +146,47 @@ async def test_user_pref_is_read_and_bad_records_are_ignored() -> None:
     await store.save('{"schema": "insight.memory.v1", "kind": "USER_PREF", "payload": {"verbosity": "HUGE"}}', USER_PREF)
     got = await ctx_memory(store).load(CONV, "u_1", SNAP, SCOPE)
     assert got.user_pref.show_recommendation is False and got.recent_refs == []
+
+
+# ---- robustness (review 29/09) ------------------------------------------------------------------------
+
+
+def raw_record(expires_at: str, snapshot: str = SNAP, i: int = 9) -> str:
+    return json.dumps(
+        {
+            "schema": "insight.memory.v1", "kind": INSIGHT_REF, "scope": "CONVERSATION", "scope_key": CONV,
+            "snapshot_id": snapshot, "expires_at": expires_at, "authorized_scope": SCOPE.model_dump(),
+            "payload": ref(i).model_dump(mode="json"),
+        }
+    )  # fmt: skip
+
+
+async def test_a_record_with_a_bad_expiry_is_skipped_not_fatal() -> None:
+    store = ListMemory()
+    await remember(store, [ref(1)])
+    await store.save(raw_record("not a date"), INSIGHT_REF)
+    await store.save(raw_record("2026-08-01T00:00:00"), INSIGHT_REF)  # no time zone
+    got = await ctx_memory(store).load(CONV, "u_1", SNAP, SCOPE)
+    assert [r.insight_id for r in got.recent_refs] == ["INS-001"]
+
+
+async def test_saving_purges_expired_records_and_refs_of_other_snapshots() -> None:
+    store = ListMemory()
+    await remember(store, [ref(1)], snapshot=OLD)
+    await store.save(raw_record((AS_OF - timedelta(days=1)).isoformat(), i=2), INSIGHT_REF)  # expired
+    await store.save(raw_record("garbage", i=3), INSIGHT_REF)
+    await remember(store, [ref(4)])
+    kept = [json.loads(n.text)["payload"]["insight_id"] for n in store.notes]
+    assert kept == ["INS-004"]
+    got = await ctx_memory(store).load(CONV, "u_1", SNAP, SCOPE)
+    assert [r.insight_id for r in got.recent_refs] == ["INS-004"] and got.stale_refs_dropped == 0
+
+
+async def test_recent_refs_never_exceed_the_contract_limit() -> None:
+    store = ListMemory()
+    cfg = llm().memory.model_copy(update={"max_refs_per_conversation": 30})
+    m = CtxMemory(store, cfg, clock=lambda: AS_OF)
+    await m.load(CONV, "u_1", SNAP, SCOPE)
+    await m.save_refs(CONV, [ref(i) for i in range(1, 26)])
+    got = await CtxMemory(store, cfg, clock=lambda: AS_OF).load(CONV, "u_1", SNAP, SCOPE)
+    assert len(got.recent_refs) == 20 and got.recent_refs[0].insight_id == "INS-025"

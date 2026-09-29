@@ -7,7 +7,9 @@ memory failure never fails the task. Methods are `async` (sdk R10, docs/OPEN_QUE
 - `NoOpMemory`: remembers nothing (tests, `memory.enabled = false`).
 - `CtxMemory`: the store over the sdk's `ctx.memory` (one instance per turn): JSON records with a
   fixed schema per kind in the note text, filtered by expiry, snapshot, conversation and
-  authorization on load.
+  authorization on load. A record with an unreadable expiry is skipped (and logged), never fatal.
+  `save_refs` first deletes expired records and references of another snapshot, so the store does
+  not grow and the scan window (`SCAN_LIMIT`) keeps holding what is still valid.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from vdagent_sdk import Memory, Note
 from .contracts import AuthorizedScope, Contract, InsightRef, MemoryContext, RecentRef, UserPref
 from .settings import MemoryConfig
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("vdagent.plugin.vdagent_insight")
 
 
 class InsightMemory(Protocol):
@@ -58,6 +60,9 @@ RECORD_SCHEMA = "insight.memory.v1"
 SCAN_LIMIT = 500
 """Notes read per load: well above `max_refs_per_conversation` + summaries + preferences."""
 MAX_TOPICS = 10
+MAX_RECENT_REFS = 20
+"""`MemoryContext.recent_refs` holds at most this many (contract); the config cannot raise it."""
+SNAPSHOT_KINDS = frozenset({"INSIGHT_REF", "TOPIC_SUMMARY"})
 
 
 class MemoryRecord(Contract):
@@ -81,6 +86,17 @@ class TopicSummary(Contract):
 
 def _within(inner: AuthorizedScope | None, outer: AuthorizedScope) -> bool:
     return inner is not None and set(inner.project_ids) <= set(outer.project_ids) and set(inner.zone_ids) <= set(outer.zone_ids)
+
+
+def _expired(rec: MemoryRecord, now: datetime) -> bool | None:
+    """True/False, or None when `expires_at` is unreadable (not ISO, or without a time zone)."""
+    if not rec.expires_at:
+        return False
+    try:
+        expires = datetime.fromisoformat(rec.expires_at)
+        return expires < now
+    except (ValueError, TypeError):
+        return None
 
 
 def topic_of(ref: InsightRef) -> str:
@@ -119,8 +135,13 @@ class CtxMemory:
         topics: list[str] = []
         pref: UserPref | None = None
         stale = 0
-        for _, rec in await self._records():
-            if rec.expires_at and datetime.fromisoformat(rec.expires_at) < now:
+        limit = min(self._cfg.max_refs_per_conversation, MAX_RECENT_REFS)
+        for note, rec in await self._records():
+            expired = _expired(rec, now)
+            if expired is None:
+                log.warning("insight memory: note %s has an unreadable expires_at %r; skipped", note.id, rec.expires_at)
+                continue
+            if expired:
                 continue
             if rec.kind == USER_PREF:
                 if pref is None:
@@ -145,7 +166,7 @@ class CtxMemory:
             if rec.snapshot_id != snapshot_id or not _within(rec.authorized_scope, authorized_scope):
                 stale += 1  # E19
                 continue
-            if len(refs) < self._cfg.max_refs_per_conversation:
+            if len(refs) < limit:
                 refs.append(
                     RecentRef(
                         insight_id=ref.insight_id,
@@ -172,9 +193,23 @@ class CtxMemory:
     async def save_refs(self, conversation_id: str | None, refs: list[InsightRef]) -> None:
         if conversation_id is None or self._snapshot_id is None or not refs:
             return
+        await self._purge()
         for ref in refs:
             await self._memory.save(self._record(INSIGHT_REF, conversation_id, ref.model_dump(mode="json")), INSIGHT_REF)
         await self._compact(conversation_id)
+
+    async def _purge(self) -> None:
+        """Delete expired records (or with an unreadable expiry) and refs/summaries of another snapshot."""
+        now = self._clock()
+        gone = [
+            note
+            for note, rec in await self._records()
+            if _expired(rec, now) is not False or (rec.kind in SNAPSHOT_KINDS and rec.snapshot_id != self._snapshot_id)
+        ]
+        for note in gone:
+            await self._memory.delete(note.id)
+        if gone:
+            log.info("insight memory: purged %d expired or stale records", len(gone))
 
     async def _compact(self, conversation_id: str) -> None:
         mine = [

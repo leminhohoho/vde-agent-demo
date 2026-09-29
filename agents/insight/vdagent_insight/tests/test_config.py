@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import re
 import unicodedata
 from decimal import Decimal
@@ -18,6 +19,7 @@ from ..settings import (
     load_llm_config,
     load_semantic_config,
 )
+from .conftest import DATAPACK_DIR, EXPORT_SAMPLE_DIR
 
 SEMANTIC = CONFIG_DIR / "semantic_insight.yaml"
 LLM = CONFIG_DIR / "llm.yaml"
@@ -49,15 +51,18 @@ def mutated(tmp_path: Path, source: Path, change: Any) -> Path:
 
 def test_shipped_semantic_config_has_the_spec_defaults() -> None:
     cfg = load_semantic_config(SEMANTIC)
-    assert cfg.version
+    assert cfg.version == "3.1.0"  # snapshot_manifest.semantic_version of the data pack (D-70)
     p = cfg.params
     assert p.overdue_threshold_days == 90
-    assert p.peer_area_tolerance_pct == Decimal("0.10")
+    assert p.peer_area_tolerance_pct == Decimal(10)  # percent, as in the DW
     assert (p.peer_tiers.compare_min, p.peer_tiers.describe_min) == (10, 5)
-    assert p.physical_defect_trigger == 25
-    assert (p.thermal_penalty_trigger, p.subsidy_min_months) == (40, 24)
-    assert p.funnel_dropoff_trigger_pct == Decimal("60")
-    assert p.low_commission_max_pct == Decimal("1.5")
+    assert p.min_peer_count == 5
+    assert p.severe_defect_penalty_min == 25
+    assert (p.thermal_penalty_min, p.subsidy_support_min_mo) == (40, 24)
+    assert p.funnel_dropoff_threshold_pct == Decimal("60")
+    assert p.low_commission_threshold_pct == Decimal("1.5")
+    assert (p.peer_spread_threshold_pct, p.secondary_gap_threshold_pct) == (Decimal(10), Decimal(10))
+    assert (p.lump_sum_ticket_ratio_threshold, p.defect_neutral_max) == (Decimal("15.0"), 24)
     assert (p.min_group_size, p.min_effect_size_days) == (5, 15)
     assert (p.freshness_warn_hours, p.freshness_error_hours) == (24, 72)
     assert p.mnar_gap_pct == Decimal("10")
@@ -78,6 +83,47 @@ def test_every_param_records_its_approval_status() -> None:
     assert cfg.param_status["max_key_insights"] == "APPROVED"
     for assumed in ("min_group_size", "max_units_in_context", "min_cause_share_pct", "conflict_tolerance_pct"):
         assert cfg.param_status[assumed] == "PENDING"
+
+
+def dw_semantic_config(folder: Path) -> tuple[str, dict[str, tuple[str, str]]]:
+    """(semantic_version, {config_key: (config_value, approval_status)}) of a data pack folder."""
+    with open(folder / "snapshot_manifest.csv", encoding="utf-8", newline="") as f:
+        (manifest,) = list(csv.DictReader(f))
+    with open(folder / "semantic_config.csv", encoding="utf-8", newline="") as f:
+        rows = {r["config_key"]: (r["config_value"], r["approval_status"]) for r in csv.DictReader(f)}
+    return manifest["semantic_version"], rows
+
+
+def assert_mirrors_dw(folder: Path) -> None:
+    cfg = load_semantic_config(SEMANTIC)
+    version, dw = dw_semantic_config(folder)
+    assert cfg.version == version
+    shared = set(dw) & set(type(cfg.params).model_fields)
+    assert shared >= {"overdue_threshold_days", "peer_area_tolerance_pct", "min_peer_count", "peer_spread_threshold_pct"}
+    for key in sorted(shared):
+        assert Decimal(str(getattr(cfg.params, key))) == Decimal(dw[key][0]), key
+
+
+def test_keys_shared_with_the_dw_semantic_config_have_its_values() -> None:
+    """D-70: the Insight config mirrors the DW semantic_config for every key they share."""
+    assert_mirrors_dw(EXPORT_SAMPLE_DIR)
+
+
+@pytest.mark.datapack
+def test_keys_shared_with_the_full_data_pack_have_its_values() -> None:
+    assert_mirrors_dw(DATAPACK_DIR)
+
+
+def test_dw_sourced_keys_are_approved() -> None:
+    cfg = load_semantic_config(SEMANTIC)
+    for key in (
+        "min_peer_count",
+        "peer_spread_threshold_pct",
+        "secondary_gap_threshold_pct",
+        "lump_sum_ticket_ratio_threshold",
+        "defect_neutral_max",
+    ):
+        assert cfg.param_status[key] == "APPROVED", key
 
 
 def test_cause_catalogue_matches_spec_7_6() -> None:

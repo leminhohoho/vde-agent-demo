@@ -151,12 +151,18 @@ class PriorityWithoutRank(_Config):
 class SemanticParams(_Config):
     overdue_threshold_days: int
     peer_area_tolerance_pct: Dec
+    """Percent (10 = ±10%), as in the DW."""
     peer_tiers: PeerTiers
-    physical_defect_trigger: int
-    thermal_penalty_trigger: int
-    subsidy_min_months: int
-    funnel_dropoff_trigger_pct: Dec
-    low_commission_max_pct: Dec
+    min_peer_count: int
+    severe_defect_penalty_min: int
+    thermal_penalty_min: int
+    subsidy_support_min_mo: int
+    funnel_dropoff_threshold_pct: Dec
+    low_commission_threshold_pct: Dec
+    peer_spread_threshold_pct: Dec
+    secondary_gap_threshold_pct: Dec
+    lump_sum_ticket_ratio_threshold: Dec
+    defect_neutral_max: int
     missing_rate_tiers: MissingRateTiers
     coverage_tiers: CoverageTiers
     min_group_size: int

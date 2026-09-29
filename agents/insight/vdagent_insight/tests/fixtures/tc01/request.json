@@ -23,7 +23,7 @@
     ]
   },
   "snapshot_id": "SNAP-20260630-01",
-  "semantic_config_version": "sem-2026-09-29",
+  "semantic_config_version": "3.1.0",
   "user_context": {
     "user_id": "u_sales_ops_1",
     "role": "SALES_OPS",

@@ -7,35 +7,55 @@ semantic_config:
       status: APPROVED
       source: PRD 5.6, DW 4.3
     peer_area_tolerance_pct:
-      value: '0.10'
+      value: '10'
       status: APPROVED
-      source: PRD 5.6
+      source: DW semantic_config 3.1.0 (percent)
     peer_tiers:
       value:
         compare_min: 10
         describe_min: 5
       status: PENDING
       source: spec 5.5
-    physical_defect_trigger:
+    min_peer_count:
+      value: 5
+      status: APPROVED
+      source: DW semantic_config 3.1.0
+    severe_defect_penalty_min:
       value: 25
       status: APPROVED
-      source: DW 4.3
-    thermal_penalty_trigger:
+      source: DW semantic_config 3.1.0
+    thermal_penalty_min:
       value: 40
       status: APPROVED
-      source: DW 4.3
-    subsidy_min_months:
+      source: DW semantic_config 3.1.0
+    subsidy_support_min_mo:
       value: 24
       status: APPROVED
-      source: DW 4.3
-    funnel_dropoff_trigger_pct:
+      source: DW semantic_config 3.1.0
+    funnel_dropoff_threshold_pct:
       value: '60'
       status: APPROVED
-      source: DW 4.3
-    low_commission_max_pct:
+      source: DW semantic_config 3.1.0
+    low_commission_threshold_pct:
       value: '1.5'
       status: APPROVED
-      source: DW 4.3
+      source: DW semantic_config 3.1.0
+    peer_spread_threshold_pct:
+      value: '10'
+      status: APPROVED
+      source: DW semantic_config 3.1.0
+    secondary_gap_threshold_pct:
+      value: '10'
+      status: APPROVED
+      source: DW semantic_config 3.1.0
+    lump_sum_ticket_ratio_threshold:
+      value: '15.0'
+      status: APPROVED
+      source: DW semantic_config 3.1.0
+    defect_neutral_max:
+      value: 24
+      status: APPROVED
+      source: DW semantic_config 3.1.0
     missing_rate_tiers:
       value:
         none_max: '5'

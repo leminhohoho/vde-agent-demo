@@ -6,21 +6,29 @@
 # - Decimals are QUOTED strings ("0.10"): a YAML float is rejected by the loader (luật 3).
 # - Templates: numbers only through {{slot}}; cause names only through {{cause_label}} (GR-01, GR-08).
 #
-# Keys marked "assumed" are used by the spec but missing from table 5.4; their defaults are ours
+# Keys shared with the DW semantic_config keep its name, unit and value (D-70; a test compares them
+# with export/semantic_config.csv). Keys marked "assumed" are used by the spec but missing from
+# table 5.4; their defaults are ours
 # (docs/OPEN_QUESTIONS.md Q8e).
 
 semantic_config:
-  version: "sem-2026-09-29"
+  version: "3.1.0"  # = snapshot_manifest.semantic_version of the DW (D-70)
 
   params:
     overdue_threshold_days: {value: 90, status: APPROVED, source: "PRD 5.6, DW 4.3"}
-    peer_area_tolerance_pct: {value: "0.10", status: APPROVED, source: "PRD 5.6"}
+    peer_area_tolerance_pct: {value: "10", status: APPROVED, source: "DW semantic_config 3.1.0 (percent)"}
     peer_tiers: {value: {compare_min: 10, describe_min: 5}, status: PENDING, source: "spec 5.5"}
-    physical_defect_trigger: {value: 25, status: APPROVED, source: "DW 4.3"}
-    thermal_penalty_trigger: {value: 40, status: APPROVED, source: "DW 4.3"}
-    subsidy_min_months: {value: 24, status: APPROVED, source: "DW 4.3"}
-    funnel_dropoff_trigger_pct: {value: "60", status: APPROVED, source: "DW 4.3"}
-    low_commission_max_pct: {value: "1.5", status: APPROVED, source: "DW 4.3"}
+    min_peer_count: {value: 5, status: APPROVED, source: "DW semantic_config 3.1.0"}
+    severe_defect_penalty_min: {value: 25, status: APPROVED, source: "DW semantic_config 3.1.0"}
+    thermal_penalty_min: {value: 40, status: APPROVED, source: "DW semantic_config 3.1.0"}
+    subsidy_support_min_mo: {value: 24, status: APPROVED, source: "DW semantic_config 3.1.0"}
+    funnel_dropoff_threshold_pct: {value: "60", status: APPROVED, source: "DW semantic_config 3.1.0"}
+    low_commission_threshold_pct: {value: "1.5", status: APPROVED, source: "DW semantic_config 3.1.0"}
+    # DW formula thresholds (the pipeline applies them; Insight only reads their results, D-70).
+    peer_spread_threshold_pct: {value: "10", status: APPROVED, source: "DW semantic_config 3.1.0"}
+    secondary_gap_threshold_pct: {value: "10", status: APPROVED, source: "DW semantic_config 3.1.0"}
+    lump_sum_ticket_ratio_threshold: {value: "15.0", status: APPROVED, source: "DW semantic_config 3.1.0"}
+    defect_neutral_max: {value: 24, status: APPROVED, source: "DW semantic_config 3.1.0"}
     # missing_rate of a secondary field, upper bounds in % (inclusive): ≤5 fine, ≤10 DQ_NOTE, ≤20 DQ_WARN,
     # ≤40 DQ_DESCRIBE_ONLY, above 40 FIELD_EXCLUDED.
     missing_rate_tiers: {value: {none_max: "5", note_max: "10", warn_max: "20", describe_only_max: "40"}, status: PENDING, source: "spec 5.5"}

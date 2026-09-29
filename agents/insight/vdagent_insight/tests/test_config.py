@@ -184,7 +184,7 @@ def test_forbidden_phrases_are_stored_nfc_lowercase() -> None:
 def test_shipped_templates_obey_gr01_and_gr02_themselves() -> None:
     cfg = load_semantic_config(SEMANTIC)
     texts = [c.template for c in cfg.causes] + [c.recommendation_text for c in cfg.causes]
-    texts += list(cfg.insight_templates.values()) + [cfg.language.peer_hidden_template]
+    texts += [*cfg.insight_templates.values(), cfg.language.peer_hidden_template]
     assert set(cfg.insight_templates) >= {"CAUSE_DISTRIBUTION", "PATTERN", "MARKET_CONTEXT", "DATA_LIMITATION", "CONFLICT"}
     for text in texts:
         assert not re.search(r"\d", SLOT.sub("", text)), text

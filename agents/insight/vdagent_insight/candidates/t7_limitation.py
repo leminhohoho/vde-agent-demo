@@ -88,7 +88,7 @@ def _dq_limitations(ctx: CandidateContext) -> list[InsightCandidate]:
     for i, (key, field) in enumerate(ctx.gate.fields.items()):
         if not field.flags:
             continue
-        candidate_id = f"C-T7-DQ-{key}"
+        candidate_id = f"C-T7-DQ-{field.table}-{field.field}"  # no dot: draft refs are <candidate_id>.<slot>
         slots = {
             "missing_rate": binding("missing_rate", field.missing_rate_pct, "PCT", f"{ctx.dq_id}#/fields/{i}/missing_rate_pct")
         }

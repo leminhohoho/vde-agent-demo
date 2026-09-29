@@ -3,7 +3,8 @@
 `validate_item` checks one draft item of [LLM-1]/[LLM-R] against the candidates the model was
 given and returns coded violations; the caller repairs once, then falls back to TEMPLATE for that
 item only. Texts checked: the template with its `{{slots}}` removed (labels are never checked, so
-English tower names pass, D-75), and the optional limitation and recommendation texts.
+English tower names pass, D-75), and the optional limitation text. Recommendations come from the
+config (`action_texts`), never from the model.
 
 | Rule | Code | Check |
 |---|---|---|
@@ -11,8 +12,7 @@ English tower names pass, D-75), and the optional limitation and recommendation 
 | GR-02 | E12 | a `forbidden_phrases` phrase or a URL |
 | GR-03 | E11 | unknown candidate, a ref outside the item's candidates, a slot the candidate lacks, template slots ≠ slot refs |
 | GR-04 | SCOPE_VIOLATION | a literal unit code (`language.unit_code_pattern`): codes only come through slots |
-| GR-06 | IMPERATIVE_RECOMMENDATION | an imperative phrase or a missing "Đề xuất" / "Có thể cân nhắc" prefix |
-| GR-06 | RECOMMENDATION_NOT_ALLOWED | no action code (BR-10), market context only (BR-09) or a metric lookup |
+| GR-06 | (config) | `action_texts` must be suggestions: checked when the config is loaded (settings.py) |
 | GR-07 | STRONG_CLAIM_NOT_SIGNIFICANT | a strong comparison on a candidate that is not `significant` |
 | GR-07 | PEER_HIDDEN | peer numbers of a candidate with fewer than `describe_min` peers (D-71) |
 | GR-08 | LANGUAGE_MISMATCH | no Vietnamese diacritic, an English word, a cause code, or a cause item without `{{cause_label}}` |
@@ -60,16 +60,16 @@ def _has_phrase(text: str, phrase: str) -> bool:
 
 def _prose(item: DraftItem) -> list[str]:
     texts = [SLOT.sub(" ", item.template)]
-    texts += [t for t in (item.limitation_text, item.recommendation_text) if t]
+    texts += [item.limitation_text] if item.limitation_text else []
     return texts
 
 
 def _references(item: DraftItem, candidates: Mapping[str, InsightCandidate], cfg: SemanticConfig) -> list[Violation]:
     out: list[Violation] = []
-    for field in ("limitation_text", "recommendation_text"):
-        text = getattr(item, field)
-        if text and SLOT.search(text):
-            out.append(Violation("GR-03", "E11", f"{field} is plain text, no {{{{slot}}}} is filled there: {text!r}"))
+    if item.limitation_text and SLOT.search(item.limitation_text):
+        out.append(
+            Violation("GR-03", "E11", f"limitation_text is plain text, no {{{{slot}}}} is filled there: {item.limitation_text!r}")
+        )
     unknown = [c for c in item.candidate_ids if c not in candidates]
     if unknown:
         out.append(Violation("GR-03", "E11", f"candidates not given to the model: {', '.join(unknown)}"))
@@ -101,23 +101,6 @@ def _numbers_and_phrases(item: DraftItem, cfg: SemanticConfig) -> list[Violation
             out.append(Violation("GR-02", "E12", f"forbidden language: {text!r}"))
         if re.search(lang.unit_code_pattern, text):
             out.append(Violation("GR-04", "SCOPE_VIOLATION", f"unit code outside a slot: {text!r}"))
-    return out
-
-
-def _recommendation(
-    item: DraftItem, given: list[InsightCandidate], cfg: SemanticConfig, request: InsightTaskRequest
-) -> list[Violation]:
-    text = item.recommendation_text
-    if not text:
-        return []
-    out: list[Violation] = []
-    actionable = any(c.action_code for c in given) and not all(c.task == "T5" for c in given)
-    if not actionable or request.intent == "PERFORMANCE_METRIC_LOOKUP":
-        out.append(Violation("GR-06", "RECOMMENDATION_NOT_ALLOWED", "no action code for this item, or a metric lookup"))
-    lowered = normalize_phrase(text)
-    prefixed = any(lowered.startswith(p) for p in cfg.language.recommendation_prefixes)
-    if not prefixed or any(_has_phrase(text, p) for p in cfg.language.imperative_phrases):
-        out.append(Violation("GR-06", "IMPERATIVE_RECOMMENDATION", f"not a suggestion: {text!r}"))
     return out
 
 
@@ -173,7 +156,6 @@ def validate_item(
     return (
         _references(item, candidates, cfg)
         + _numbers_and_phrases(item, cfg)
-        + _recommendation(item, given, cfg, request)
         + _comparisons(item, given, cfg)
         + _language(item, given, cfg)
         + _statistic(item, cfg)

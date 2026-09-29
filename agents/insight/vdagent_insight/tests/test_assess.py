@@ -56,18 +56,19 @@ def test_a_well_evidenced_root_cause_is_key_with_a_suggestion() -> None:
     assert [e.evidence_id for e in ins.evidence_refs] == [f"EV-001-{i}" for i in range(1, len(ins.evidence_refs) + 1)]
     assert ins.lineage.source_refs and ins.lineage.calculation_refs and ins.lineage.peer_rule_ref == "dw.peer_group@3.1.0"
     assert ins.recommendation is not None and ins.recommendation.action_code == "TARGETED_PRICE_CORRECTION"
-    assert ins.recommendation.text == ctx.cfg.cause("OVERPRICED_VS_PEER").recommendation_text
+    assert ins.recommendation.text == ctx.cfg.action_texts["TARGETED_PRICE_CORRECTION"]
     assert result.payload.summary.headline_insight_ids == ["INS-001"]
     assert result.payload.summary.narrative_mode == "LLM" and result.status == "VALID"
     (hint,) = result.payload.chart_hints
     assert (hint.insight_id, hint.suggested_chart) == ("INS-001", "kpi_card") and hint.metric_refs
 
 
-def test_the_model_recommendation_is_used_when_it_passed_validation() -> None:
-    rec = "Có thể cân nhắc rà soát đơn giá niêm yết của căn so với nhóm tương đồng."
-    _, result = run(overpriced_ctx(), llm_draft("C-T1-U011-1-OVERPRICED_VS_PEER", recommendation_text=rec))
+def test_q1_the_recommendation_is_always_the_config_text_of_the_action() -> None:
+    """Live P5 Q1: the model recommended "so với thị trường thứ cấp" for OVERPRICED_VS_PEER."""
+    _, result = run(overpriced_ctx(), llm_draft("C-T1-U011-1-OVERPRICED_VS_PEER"))
     (ins,) = result.payload.insights
-    assert ins.recommendation is not None and ins.recommendation.text == rec
+    assert ins.recommendation is not None
+    assert ins.recommendation.text == overpriced_ctx().cfg.action_texts[ins.recommendation.action_code]
 
 
 def test_template_mode_makes_the_artifact_partial() -> None:

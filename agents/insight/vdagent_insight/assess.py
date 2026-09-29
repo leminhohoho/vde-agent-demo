@@ -12,8 +12,9 @@ The LLM never assigns any of this. From the narrated items (narrate.py) and thei
 - KEY (5.2, D-28): ROOT_CAUSE_SIGNAL, CAUSE_DISTRIBUTION or a `significant` PATTERN, with evidence,
   both lineage branches, confidence ≠ LOW and no CONFLICT; at most `max_key_insights` (request
   constraint, else config). `eligible_for_conclusion` = KEY;
-- recommendation (BR-10, D-33): the validated model text, else the config sentence; only with an
-  action code, never for a metric lookup, and not when the user turned recommendations off;
+- recommendation (BR-10, D-33): always the config sentence of the action code (`action_texts`),
+  never model text; only with an action code, never for a metric lookup, and not when the user
+  turned recommendations off;
 - status (4.4): PARTIAL when the narration fell back to TEMPLATE, a candidate was rejected for
   missing evidence (E05/E06), a CONFLICT is open or an optional input is missing; INVALID when
   candidates existed but nothing could be rendered; otherwise VALID ("no overdue unit" is VALID).
@@ -127,7 +128,7 @@ def _recommendation(
         or cands[0].insight_type not in RECOMMENDABLE
     ):
         return None
-    text = item.recommendation_text or recommendation_text(actionable, ctx.cfg)
+    text = recommendation_text(actionable, ctx.cfg)
     if text is None or actionable.action_code is None:
         return None
     return Recommendation(action_code=actionable.action_code, text=text, is_suggestion=True, requires_human_approval=True)

@@ -128,7 +128,7 @@ def test_unresolvable_slots_are_render_errors(template: str, refs: dict[str, str
 
 def test_recommendation_comes_from_the_config_only_with_an_action() -> None:
     ctx, c = overpriced()
-    assert recommendation_text(c, ctx.cfg) == ctx.cfg.cause("OVERPRICED_VS_PEER").recommendation_text
+    assert recommendation_text(c, ctx.cfg) == ctx.cfg.action_texts["TARGETED_PRICE_CORRECTION"]
     ctx2 = context(
         dataset([unit(11)], [inventory(11, 145)], [diagnostic(11, 145)], [cause(11, "OVERPRICED_VS_PEER")]), tasks=("T1",)
     )

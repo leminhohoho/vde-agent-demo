@@ -228,7 +228,7 @@ def render_reply(
         items = shown[:k]
         lines = [*head, "", "Điểm chính:" if key else "Kết quả:"]
         for n, ins in enumerate(items, start=1):
-            rec = f" → Đề xuất: {_cut(ins.recommendation.text, text_max)}" if ins.recommendation else ""
+            rec = f" → {_cut(ins.recommendation.text, text_max)}" if ins.recommendation else ""
             lines.append(f"{n}. {_cut(ins.claim.rendered_text, text_max)}{rec}")
         if len(items) < len(shown):
             lines.append(f"… và {len(shown) - len(items)} ý khác trong artifact.")

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from ..candidates.t1_unit import t1_candidates
 from ..candidates.t3_pattern import t3_candidates
@@ -54,8 +55,7 @@ def check(
 
 
 def test_a_clean_item_has_no_violation() -> None:
-    rec = "Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung vị nhóm tương đồng."
-    assert check(item(recommendation_text=rec, limitation_text="Số peer hiện có đủ để so sánh.")) == set()
+    assert check(item(limitation_text="Số peer hiện có đủ để so sánh.")) == set()
 
 
 # ---- GR-01 numbers only through slots (E10) -------------------------------------------------------
@@ -91,10 +91,16 @@ def test_gr01_the_violation_names_the_offending_word() -> None:
 
 
 def test_a_slot_in_a_plain_text_field_is_named_as_such() -> None:
-    """Live P5: the model wrote "… cho căn {{unit}}." in recommendation_text (plain text, never filled)."""
-    rec = "Có thể cân nhắc điều chỉnh chính sách hoa hồng cho căn {{unit}}."
-    violations = validate_item(item(recommendation_text=rec), {CID: C}, CFG, request())
-    assert [(v.code, "recommendation_text" in v.detail) for v in violations] == [("E11", True)]
+    """Live P5: the model wrote "… cho căn {{unit}}." in a plain-text field (never filled)."""
+    text = "Dữ liệu peer của căn {{unit}} còn hạn chế."
+    violations = validate_item(item(limitation_text=text), {CID: C}, CFG, request())
+    assert [(v.code, "limitation_text" in v.detail) for v in violations] == [("E11", True)]
+
+
+def test_the_model_cannot_write_a_recommendation() -> None:
+    """Recommendations come from the config by action code (P5 polish); the draft has no such field."""
+    with pytest.raises(ValidationError):
+        item(recommendation_text="Đề xuất xem xét điều chỉnh đơn giá.")
 
 
 def test_gr01_applies_to_limitation_and_recommendation_texts() -> None:
@@ -133,22 +139,6 @@ def test_gr03_unknown_candidates_and_slot_mismatches_are_e11() -> None:
 
 def test_gr04_a_literal_unit_code_is_a_scope_violation() -> None:
     assert "SCOPE_VIOLATION" in check(item("Căn SAPPHIRE1-16.232 tồn {{dom}}, liên quan tới {{cause_label}}."))
-
-
-# ---- GR-06 recommendations are suggestions -----------------------------------------------------------
-
-
-def test_gr06_imperative_or_unprefixed_recommendations_are_rejected() -> None:
-    assert "IMPERATIVE_RECOMMENDATION" in check(item(recommendation_text="Hãy giảm giá căn này ngay lập tức."))
-    assert "IMPERATIVE_RECOMMENDATION" in check(item(recommendation_text="Điều chỉnh đơn giá niêm yết cho căn."))
-
-
-def test_gr06_no_recommendation_without_an_action_or_for_a_metric_lookup() -> None:
-    no_action = overpriced().model_copy(update={"action_code": None})
-    rec = "Đề xuất xem xét điều chỉnh đơn giá niêm yết."
-    assert "RECOMMENDATION_NOT_ALLOWED" in check(item(recommendation_text=rec), {CID: no_action})
-    lookup = request(intent="PERFORMANCE_METRIC_LOOKUP")
-    assert "RECOMMENDATION_NOT_ALLOWED" in check(item(recommendation_text=rec), req=lookup)
 
 
 # ---- GR-07 strong comparisons need significance; hidden peers ---------------------------------------

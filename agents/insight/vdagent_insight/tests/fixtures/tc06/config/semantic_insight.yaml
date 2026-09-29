@@ -153,8 +153,6 @@ semantic_config:
     action_code: EXPEDITE_LEGAL_PROCEDURES
     template: Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu
       tố có khả năng liên quan tới {{overdue_units}} quá hạn.
-    recommendation_text: Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý và bảo
-      lãnh ngân hàng trước khi mở bán đại trà.
     required_evidence:
     - slot: permit
       table: dim_project_profile
@@ -167,8 +165,6 @@ semantic_config:
     action_code: DEFECT_COMPENSATION_DISCOUNT
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (điểm phạt khuyết tật {{defect}}, giá so với nhóm tương đồng {{spread}}).'
-    recommendation_text: Đề xuất xem xét chính sách chiết khấu bù trừ cho khuyết điểm
-      công năng của căn.
     required_evidence:
     - slot: defect
       table: dm_unit_friction_diagnostics
@@ -191,8 +187,6 @@ semantic_config:
     action_code: INSULATION_INTERIOR_PACKAGE
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (điểm phạt nhiệt/hướng {{thermal}}, hỗ trợ lãi suất {{subsidy}}).'
-    recommendation_text: Đề xuất xem xét gói nội thất cách nhiệt kèm ưu đãi phí quản
-      lý cho căn.
     required_evidence:
     - slot: thermal
       table: dm_unit_friction_diagnostics
@@ -208,8 +202,6 @@ semantic_config:
     action_code: EXTENDED_PAYMENT_SCHEDULE
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (giá sơ cấp so với thứ cấp {{secondary_gap}}).'
-    recommendation_text: Đề xuất xem xét giãn tiến độ thanh toán để kéo giá ròng về
-      gần mặt bằng thứ cấp.
     required_evidence:
     - slot: secondary_gap
       table: dm_unit_friction_diagnostics
@@ -221,8 +213,6 @@ semantic_config:
     action_code: BANK_SUBSIDY_EXTENSION
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (giá trị căn bằng {{ticket_ratio}} thu nhập năm của hộ gia đình).'
-    recommendation_text: Đề xuất xem xét kéo dài thời gian hỗ trợ lãi suất và ân hạn
-      nợ gốc cùng ngân hàng đối tác.
     required_evidence:
     - slot: ticket_ratio
       table: dm_unit_friction_diagnostics
@@ -233,8 +223,6 @@ semantic_config:
     action_code: TARGETED_PRICE_CORRECTION
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (đơn giá/m² so với trung vị peer {{spread}}).'
-    recommendation_text: Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung
-      vị nhóm tương đồng.
     required_evidence:
     - slot: spread
       table: dm_unit_friction_diagnostics
@@ -261,8 +249,6 @@ semantic_config:
     action_code: BOOST_BROKER_COMMISSION
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (hoa hồng sàn {{commission}}).'
-    recommendation_text: Đề xuất xem xét nâng hoa hồng hoặc thưởng chốt cọc cho sàn
-      môi giới.
     required_evidence:
     - slot: commission
       table: fact_unit_inventory_snapshot
@@ -278,13 +264,28 @@ semantic_config:
     action_code: SALES_PITCH_AUDIT
     template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
       (tỷ lệ rút cọc {{dropoff}}).'
-    recommendation_text: Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam
-      kết với khách giữ chỗ.
     required_evidence:
     - slot: dropoff
       table: dm_unit_friction_diagnostics
       field: funnel_dropoff_rate_pct
       unit: PCT
+  action_texts:
+    EXPEDITE_LEGAL_PROCEDURES: Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý
+      và bảo lãnh ngân hàng trước khi mở bán đại trà.
+    DEFECT_COMPENSATION_DISCOUNT: Đề xuất xem xét chính sách chiết khấu bù trừ cho
+      khuyết điểm công năng của căn.
+    INSULATION_INTERIOR_PACKAGE: Đề xuất xem xét gói nội thất cách nhiệt kèm ưu đãi
+      phí quản lý cho căn.
+    EXTENDED_PAYMENT_SCHEDULE: Đề xuất xem xét giãn tiến độ thanh toán để kéo giá
+      ròng về gần mặt bằng thứ cấp.
+    BANK_SUBSIDY_EXTENSION: Đề xuất xem xét kéo dài thời gian hỗ trợ lãi suất và ân
+      hạn nợ gốc cùng ngân hàng đối tác.
+    TARGETED_PRICE_CORRECTION: Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần
+      mức trung vị nhóm tương đồng.
+    BOOST_BROKER_COMMISSION: Đề xuất xem xét nâng hoa hồng hoặc thưởng chốt cọc cho
+      sàn môi giới.
+    SALES_PITCH_AUDIT: Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam
+      kết với khách giữ chỗ.
   insight_templates:
     CAUSE_DISTRIBUTION: Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}}
       tổng điểm quy nguyên nhân (có trọng số) và xuất hiện ở {{unit_share}} số căn

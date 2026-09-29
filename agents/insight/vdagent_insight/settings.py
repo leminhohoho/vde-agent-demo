@@ -183,7 +183,6 @@ class CauseEntry(_Config):
     action_code: str
     template: str
     """TEMPLATE fallback sentence for ROOT_CAUSE_SIGNAL (spec 8.2)."""
-    recommendation_text: str
     required_evidence: list[EvidenceSpec]
     """Missing or DQ-FAIL → the candidate is rejected (EVIDENCE_FIELD_MISSING)."""
     supplementary_evidence: list[EvidenceSpec] = []
@@ -271,6 +270,7 @@ class _SemanticRaw(_Config):
     version: str = Field(min_length=1)
     params: dict[str, _ParamEntry]
     causes: list[CauseEntry] = Field(min_length=1)
+    action_texts: dict[str, str]
     insight_templates: dict[str, str]
     forbidden_phrases: list[str]
     english_whitelist: list[str]
@@ -288,6 +288,8 @@ class SemanticConfig(_Config):
     params: SemanticParams
     param_status: dict[str, ParamStatus]
     causes: tuple[CauseEntry, ...]
+    action_texts: dict[str, str]
+    """Recommendation sentence per action_code (deterministic; the LLM never writes one)."""
     insight_templates: dict[str, str]
     forbidden_phrases: tuple[str, ...]
     """NFC + lowercase, ready for GR-02 matching."""
@@ -338,6 +340,16 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         raise ConfigError(
             f"{path.name}: min_group_size ({params.min_group_size}) must equal peer_tiers.describe_min ({tiers.describe_min})"
         )
+    lang = raw.language
+    for entry in raw.causes:
+        if entry.action_code not in raw.action_texts:
+            raise ConfigError(f"{path.name}: action_texts has no sentence for {entry.action_code}")
+    for action, text in raw.action_texts.items():
+        lowered = normalize_phrase(text)
+        prefixed = any(lowered.startswith(normalize_phrase(p)) for p in lang.recommendation_prefixes)
+        imperative = any(re.search(rf"(?<!\w){re.escape(normalize_phrase(p))}(?!\w)", lowered) for p in lang.imperative_phrases)
+        if not prefixed or imperative:
+            raise ConfigError(f"{path.name}: action_texts.{action} is not a suggestion (GR-06): {text!r}")
     for metric in raw.market_metrics:
         if metric.column not in MacroRow.model_fields:
             raise ConfigError(f"{path.name}: market metric: fact_market_macro_monthly has no column {metric.column}")
@@ -349,6 +361,7 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         params=params,
         param_status={k: e.status for k, e in raw.params.items()},
         causes=tuple(raw.causes),
+        action_texts=dict(raw.action_texts),
         insight_templates=dict(raw.insight_templates),
         forbidden_phrases=tuple(normalize_phrase(p) for p in raw.forbidden_phrases),
         english_whitelist=tuple(raw.english_whitelist),

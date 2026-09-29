@@ -428,7 +428,6 @@ class DraftItem(Contract):
     # given to the model: checked per item by validation.py (GR-01/GR-03), not here, so one bad item
     # falls back to TEMPLATE instead of failing the whole draft.
     limitation_text: str | None = Field(default=None, max_length=300)
-    recommendation_text: str | None = Field(default=None, max_length=300)
 
     @field_validator("slots")
     @classmethod

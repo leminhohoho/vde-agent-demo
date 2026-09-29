@@ -183,7 +183,7 @@ def test_forbidden_phrases_are_stored_nfc_lowercase() -> None:
 
 def test_shipped_templates_obey_gr01_and_gr02_themselves() -> None:
     cfg = load_semantic_config(SEMANTIC)
-    texts = [c.template for c in cfg.causes] + [c.recommendation_text for c in cfg.causes]
+    texts = [c.template for c in cfg.causes] + list(cfg.action_texts.values())
     texts += [*cfg.insight_templates.values(), cfg.language.peer_hidden_template]
     assert set(cfg.insight_templates) >= {"CAUSE_DISTRIBUTION", "PATTERN", "MARKET_CONTEXT", "DATA_LIMITATION", "CONFLICT"}
     for text in texts:
@@ -365,3 +365,27 @@ def test_shipped_llm_config_matches_spec_7_5() -> None:
 def test_invalid_llm_config_names_the_problem(tmp_path: Path, change: Any, message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         load_llm_config(mutated(tmp_path, LLM, change))
+
+
+def test_every_action_has_a_config_recommendation_that_is_a_suggestion() -> None:
+    cfg = load_semantic_config(SEMANTIC)
+    assert {c.action_code for c in cfg.causes} <= set(cfg.action_texts)
+    for text in cfg.action_texts.values():
+        assert any(text.startswith(p) for p in ("Đề xuất", "Có thể cân nhắc")), text
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d["action_texts"].pop("TARGETED_PRICE_CORRECTION"),
+        lambda d: d["action_texts"].update(TARGETED_PRICE_CORRECTION="Hãy giảm giá ngay lập tức."),
+        lambda d: d["action_texts"].update(TARGETED_PRICE_CORRECTION="Giảm giá căn."),
+    ],
+)
+def test_a_missing_or_imperative_action_text_is_a_config_error(tmp_path: Path, change: Any) -> None:
+    data = yaml.safe_load(SEMANTIC.read_text(encoding="utf-8"))
+    change(data["semantic_config"])
+    bad = tmp_path / "semantic_insight.yaml"
+    bad.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_semantic_config(bad)

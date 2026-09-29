@@ -318,3 +318,8 @@ async def test_without_key_insights_the_reply_lists_and_returns_up_to_five_items
     assert data["insights"] and len(data["insights"]) <= 5
     assert all(i["eligible_for_conclusion"] is False for i in data["insights"])
     assert "Kết quả:" in reply
+
+
+async def test_q1_the_reply_does_not_say_de_xuat_twice(tmp_path: Path) -> None:
+    reply, _ = await ask(tmp_path, "Vì sao căn SAPPHIRE1-16.231 bán chậm?")
+    assert "Đề xuất: Đề xuất" not in reply and "→ Đề xuất xem xét" in reply

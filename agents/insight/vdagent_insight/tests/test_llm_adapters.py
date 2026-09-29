@@ -30,7 +30,6 @@ DRAFT = {
             "template": "Căn {{unit}}.",
             "slots": [{"slot": "unit", "ref": "C1.unit"}],
             "limitation_text": None,
-            "recommendation_text": None,
         }
     ],
     "skipped": [],

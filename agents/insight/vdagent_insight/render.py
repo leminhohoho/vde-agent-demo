@@ -8,7 +8,7 @@ Pure. Numbers never come from the LLM (luật 1):
 - `render_template` is the fallback sentence of one candidate: the cause template for
   ROOT_CAUSE_SIGNAL (the peer-free variant when there are too few peers, D-71), else the
   template of its insight type. Candidate slot names are the template slot names by design.
-- `recommendation_text`: the config sentence of the cause, only when the candidate has an action.
+- `recommendation_text`: the config sentence of the candidate's action code (`action_texts`).
 
 A slot that cannot be resolved raises `RenderError`: the caller drops the item (or falls back).
 """
@@ -150,4 +150,4 @@ def recommendation_text(candidate: InsightCandidate, cfg: SemanticConfig) -> str
     if candidate.action_code is None or candidate.cause_code not in cfg.allowed_cause_codes:
         return None
     assert candidate.cause_code is not None
-    return cfg.cause(candidate.cause_code).recommendation_text
+    return cfg.action_texts.get(candidate.action_code)

@@ -36,7 +36,6 @@ class NarratedItem:
     claim: RenderedClaim
     source: Source
     limitation_text: str | None = None
-    recommendation_text: str | None = None
 
 
 @dataclass
@@ -105,9 +104,7 @@ def narrate(
             except RenderError as exc:
                 out.violations[i] = [Violation("GR-03", "E11", str(exc))]
             else:
-                out.items.append(
-                    NarratedItem(tuple(item.candidate_ids), claim, "LLM", item.limitation_text, item.recommendation_text)
-                )
+                out.items.append(NarratedItem(tuple(item.candidate_ids), claim, "LLM", item.limitation_text))
                 used |= set(item.candidate_ids)
                 continue
         out.narrative_mode = "TEMPLATE"

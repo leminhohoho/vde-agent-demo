@@ -1,7 +1,7 @@
 """Settings (pipeline step 2): this plugin folder's `.env` and the versioned `config/*.yaml`.
 
 `.env`: every plugin shares the Backend's process, so the file is read with `dotenv_values()` into a
-mapping and `os.environ` is never modified (SDK rule R11).
+mapping and `os.environ` is never modified (SDK rule R11); runtime.py reads the variables.
 
 `config/semantic_insight*.yaml` (spec §5.4, §7.6) and `config/llm.yaml` (spec §7.5) hold every
 threshold, template, model name and price (luật 2). The loaders validate them strictly: unknown or
@@ -14,8 +14,6 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -29,45 +27,12 @@ from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, MacroRow, 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"  # agents/<name>/.env
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"  # agents/<name>/config
 SEMANTIC_GLOB = "semantic_insight*.yaml"
-REQUIRED_VARS: tuple[str, ...] = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL")
-DEFAULT_LLM_TIMEOUT_S = 120.0
-DEFAULT_EMBED_MODEL = "openai/text-embedding-3-small"
-
-
-@dataclass(frozen=True)
-class Settings:
-    openai_api_key: str
-    openai_base_url: str
-    llm_model: str
-    llm_timeout_s: float
-    embed_model: str
 
 
 def read_env(env_file: Path = ENV_FILE) -> dict[str, str]:
     """The process environment overlaid with `env_file` (the file wins; a missing file is fine)."""
     from_file = dotenv_values(env_file) if env_file.is_file() else {}
     return {**os.environ, **{k: v for k, v in from_file.items() if v is not None}}
-
-
-def load_settings(env: Mapping[str, str]) -> Settings:
-    """Read and validate the model settings; `PluginConfigError` names the offending variable."""
-    for var in REQUIRED_VARS:
-        if not env.get(var, "").strip():
-            raise PluginConfigError(f"missing required environment variable {var}")
-    raw_timeout = env.get("LLM_TIMEOUT_S", "").strip()
-    try:
-        llm_timeout_s = float(raw_timeout) if raw_timeout else DEFAULT_LLM_TIMEOUT_S
-    except ValueError:
-        raise PluginConfigError(f"LLM_TIMEOUT_S must be a number; got {raw_timeout!r}") from None
-    if llm_timeout_s <= 0:
-        raise PluginConfigError(f"LLM_TIMEOUT_S must be positive; got {llm_timeout_s:g}")
-    return Settings(
-        openai_api_key=env["OPENAI_API_KEY"].strip(),
-        openai_base_url=env["OPENAI_BASE_URL"].strip(),
-        llm_model=env["LLM_MODEL"].strip(),
-        llm_timeout_s=llm_timeout_s,
-        embed_model=env.get("EMBED_MODEL", "").strip() or DEFAULT_EMBED_MODEL,
-    )
 
 
 # ---- Versioned YAML config --------------------------------------------------------------------

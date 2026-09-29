@@ -165,6 +165,10 @@ class ExportArtifactReader:
                 self._pack = await asyncio.to_thread(_load, self._folder)
         return self._pack
 
+    @property
+    def cfg(self) -> SemanticConfig:
+        return self._cfg
+
     async def manifest(self) -> Manifest:
         return (await self._data()).manifest
 

@@ -208,9 +208,14 @@ async def save_memory(request: InsightTaskRequest, envelope: ArtifactEnvelope, d
         return
     refs = [
         InsightRef(
-            insight_id=i.insight_id, artifact_id=envelope.artifact_id, subject=i.subject, insight_type=i.insight_type,
-            cause_code=i.cause_code, level=i.level, materiality=i.materiality,
-        )  # fmt: skip
+            insight_id=i.insight_id,
+            artifact_id=envelope.artifact_id,
+            subject=i.subject,
+            insight_type=i.insight_type,
+            cause_code=i.cause_code,
+            level=i.level,
+            materiality=i.materiality,
+        )
         for i in envelope.payload.insights
         if i.materiality == "KEY"
     ]
@@ -247,9 +252,7 @@ async def narrate_task(
     if deps.providers is None or not candidates:
         return Narrated(_template(ctx, candidates, deps), candidates)
     try:
-        steps = await asyncio.wait_for(
-            run_llm_steps(ctx, candidates, deps.providers, deps.llm, memory), max(remaining_s, 0.001)
-        )
+        steps = await asyncio.wait_for(run_llm_steps(ctx, candidates, deps.providers, deps.llm, memory), max(remaining_s, 0.001))
     except TimeoutError:
         return Narrated(_template(ctx, candidates, deps), candidates, deadline_hit=True)
     prompt = system_prompt(ctx.cfg, deps.llm) + "\n" + user_prompt(ctx.request, steps.kept, memory, ctx.cfg)
@@ -283,7 +286,12 @@ def _usage_fields(u: LlmUsage) -> dict[str, Any]:
 
 def _read_ref(art: InputArtifact) -> ReadArtifactRef:
     return ReadArtifactRef.model_validate(
-        {"artifact_id": art.artifact_id, "artifact_type": art.artifact_type, "version": art.version, "content_hash": art.content_hash}
+        {
+            "artifact_id": art.artifact_id,
+            "artifact_type": art.artifact_type,
+            "version": art.version,
+            "content_hash": art.content_hash,
+        }
     )
 
 
@@ -364,7 +372,9 @@ async def run_task(request: InsightTaskRequest, deps: InsightDeps) -> TaskResult
     _llm_events(n, emit)
 
     # 9. assess
-    result = assess(ctx, n.kept, [*batch.rejected, *n.rejected], n.narration, show_recommendation=memory.user_pref.show_recommendation)
+    result = assess(
+        ctx, n.kept, [*batch.rejected, *n.rejected], n.narration, show_recommendation=memory.user_pref.show_recommendation
+    )
     status = result.status
     limitations: list[Limitation] = []
     if n.deadline_hit:
@@ -417,7 +427,10 @@ async def run_task(request: InsightTaskRequest, deps: InsightDeps) -> TaskResult
         spent = await deps.usage.spent_today()
         if over_daily_budget(spent, deps.llm):
             emit("INSIGHT_BUDGET_ALERT", {"spent_today_usd": str(spent), "daily_usd": str(deps.llm.budget.daily_usd)})
-    emit("INSIGHT_ARTIFACT_PERSISTED", {"artifact_id": envelope.artifact_id, "status": status, "content_hash": envelope.content_hash})
+    emit(
+        "INSIGHT_ARTIFACT_PERSISTED",
+        {"artifact_id": envelope.artifact_id, "status": status, "content_hash": envelope.content_hash},
+    )
 
     await save_memory(request, envelope, deps, emit)
     emit(

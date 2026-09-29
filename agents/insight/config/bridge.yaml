@@ -1,0 +1,26 @@
+# Compat mode of bridge.py (D-10 pending): free text → InsightTaskRequest by fixed rules, no LLM.
+# Keywords are matched on folded text (lower case, no Vietnamese diacritics, đ → d).
+insight_bridge_config:
+  version: "2026-09-29"
+  intent_keywords:  # first intent with a keyword in the question wins; none → default_intent
+    PEER_GROUP_COMPARISON: ["so sanh"]
+    SLOW_MOVING_INVESTIGATION: ["vi sao", "tai sao", "ban cham", "cham ban", "chua ban", "ton lau", "qua han"]
+    PERFORMANCE_METRIC_LOOKUP: ["trung binh", "thong ke"]
+  default_intent: SLOW_MOVING_INVESTIGATION
+  tasks:  # spec §2 "Map intent → task"
+    SLOW_MOVING_INVESTIGATION:
+      UNIT: [T1, T5, T6, T7]
+      ZONE: [T1, T2, T3, T5, T6, T7]
+      PROJECT: [T1, T2, T3, T5, T6, T7]
+    PEER_GROUP_COMPARISON:
+      UNIT: [T1, T6, T7]
+      ZONE: [T1, T6, T7]
+      PROJECT: [T1, T6, T7]
+    PERFORMANCE_METRIC_LOOKUP:
+      UNIT: [T3, T5, T7]
+      ZONE: [T3, T5, T7]
+      PROJECT: [T3, T5, T7]
+  name_prefixes: ["the "]  # "The Sapphire 1" is also matched as "Sapphire 1"
+  compat_role: SALES_MANAGER  # D-14: no project/zone access data yet → every project of the pack
+  max_reply_chars: 6000  # D-11
+  compact_max_chars: 2000  # D-18

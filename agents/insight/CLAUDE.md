@@ -17,7 +17,7 @@ Chỉ sửa trong `agents/insight/` (ngoại lệ đã duyệt: `uv.lock`, targe
 9. Memory (9.5): chỉ tham chiếu + sở thích, cấm số liệu/kết luận; memory lỗi không làm hỏng task.
 10. Artifact bất biến, SHA-256 trên canonical JSON (`artifacts.content_hash`).
 11. Gate, candidates, validation, render, assess là hàm thuần: không I/O, không LLM, bootstrap seed cố định.
-12. Đổi `prompts/system.md`/`repair.md` → tăng `prompt_version` trong `config/llm.yaml`, chạy lại TC-01→TC-33.
+12. Đổi `prompts/v2/system.md`/`repair.md` → tăng `prompt_version` (ghi trong file + `config/llm.yaml`, có test), chạy lại TC-01→TC-33.
 13. Contract: Pydantic v2 `extra="forbid"`, giữ nguyên tên field/enum của spec (`contracts.py`).
 14. TDD: test đỏ trước, rồi mới code. Interface I/O là `async` (sdk R10).
 
@@ -31,11 +31,11 @@ vdagent_insight/
   contracts.py  model Pydantic                artifacts.py  canonical JSON, Reader/Writer    [1, 2, 10]
   view.py       join dataset theo căn, BR-01  formatting.py  hiển thị số vi-VN               [3, 4, 8]
   gate.py       Sufficiency Gate 5.5          candidates/   T1 T2 T3 T5 T7, stats, priority   [3, 4, 5]
-  llm/          LlmClient, Fake, gemini, openai, preflight, usage                             [5, 6, R]
+  llm/          LlmClient, Fake, gemini, openai, schema, calls (retry/fallback), preflight, prompt, steps, usage [5, 6, R]
   validation.py GR-01→08 + quét injection     render.py  claim_binder, nhãn, TEMPLATE        [7, 8]
   narrate.py    áp draft từng item, fallback TEMPLATE, LLM_SKIPPED                              [7, 8]
   assess.py     confidence, KEY, status       memory.py  InsightMemory, NoOpMemory           [2, 9, 10]
-  prompts/      system, repair, extract, compact
+  prompts/      v2/system, v2/repair (bản cũ system/compact/extract giữ tới P4)
   tests/        test_*.py, builders.py, fixtures/tcNN/ (request.json + artifacts/*.json [+ config/])
 ```
 `agent.py`, `bridge.py`, `MemoryMiddleware` và `tests/test_agent.py` là bản LangChain cũ, giữ tới P4 rồi thay.
@@ -44,7 +44,7 @@ vdagent_insight/
 - `make insight-test` = `uv run pytest agents/insight`
 - `make insight-lint` = `uvx ruff@0.16.9 check agents/insight`, `... format --check agents/insight`,
   `uv run --with basedpyright==1.40.1 python -m basedpyright agents/insight`
-  (không có `make` thì chạy thẳng các lệnh trên).
+  (không có `make` thì chạy thẳng các lệnh trên). Live: `INSIGHT_LIVE=1 uv run pytest agents/insight -m live -s`.
 
 ## Giả định đang dùng (chi tiết: OPEN_QUESTIONS)
 - Input: `InsightTaskRequest` JSON trong message; lõi `run_task(request, deps)` không biết ctx.

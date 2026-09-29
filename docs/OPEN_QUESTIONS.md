@@ -64,6 +64,32 @@ Chi tiết và số liệu: `docs/INSIGHT_P2_P5_DECISIONS.md` (mục "Quyết đ
 | Q16 | Data pack xác nhận NULL của `spiff_bonus_vnd` có nghĩa. | ĐÓNG |
 | TC | TC-01 → `SAPPHIRE1-16.231`; TC-04 → The Beverly. | ĐÃ CHỐT |
 
+## D-30: model, key, endpoint (probe 29/09, `agents/insight/scripts/llm_probe.py`)
+
+| Provider | Kết quả | Trạng thái |
+|---|---|---|
+| Gemini `gemini-3.5-flash-lite` (google-genai 2.25, `GEMINI_API_KEY`) | Trả lời được; `response_json_schema` hợp lệ; `thinking_level=MINIMAL` → 0 thinking token; finish STOP; ~1,3 s; 21 in / 23 out token | ĐÃ CHỐT |
+| OpenAI `gpt-6-luna` (openai 2.54, Responses API, `OPENAI_API_KEY`, endpoint mặc định api.openai.com) | Trả lời được; `json_schema` strict hợp lệ; `reasoning.effort=none` → 0 reasoning token; ~3,9 s | ĐÃ CHỐT |
+| `OPENAI_BASE_URL` | Để trống → dùng api.openai.com (không đi qua proxy) | ĐÃ CHỐT |
+| `LLM_MODEL` | Trống → agent LangChain cũ **không load** khi chạy backend cho tới P4 (không ảnh hưởng test) | Ghi nhận |
+
+Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egress trong docker-compose kiểm ở P5.
+
+## Phase 3 (LLM adapters, pre-flight, repair, cost)
+
+| # | Quyết định / giả định | Trạng thái |
+|---|---|---|
+| P3-1 | Schema gửi provider (D-34): sinh từ Pydantic, inline `$ref`, mọi object đóng + mọi field `required` (optional → nullable), bỏ `title`/`default`/giới hạn độ dài; Pydantic kiểm đầy đủ sau khi nhận. | CHỐT (kỹ thuật) |
+| P3-2 | Phân loại lỗi (D-35): timeout, 429, 5xx, lỗi mạng → E08 (retry 1 lần sau 1 s → OpenAI → TEMPLATE); 400, safety, hết token, JSON sai schema → E09 → 1 lần repair tới **provider vừa trả lời** (reasoning low) → TEMPLATE theo item. | CHỐT |
+| P3-3 | TC-18 thực hiện theo D-35: Gemini lỗi 2 lần (1 + 1 retry), OpenAI 503 → TEMPLATE (spec ghi "3 lần"). | Chờ cập nhật spec |
+| P3-4 | Prompt v2 ở `prompts/v2/` (bản LangChain cũ còn đọc `prompts/system.md` tới P4). `prompt_version` ghi trong file prompt phải khớp `config/llm.yaml` (có test). Hiện `insight-prompt-1.2.0`. | TẠM (P4 chuyển về `prompts/`) |
+| P3-5 | (Chuẩn hóa ngoặc được chấp nhận, **đếm và log** `INSIGHT_SLOT_NAME_NORMALISED`.) Trong prompt, candidate mang mã ngắn `c1`, `c2`… kèm danh sách `refs` hợp lệ; câu trả lời được đổi về id thật trước khi validate. Lý do (live 29/09): id dài làm Gemini vượt `max_output_tokens`; model đoán sai ref (`.cause` thay cho `.cause_label`) và ghi tên slot có ngoặc `{{…}}` (được chuẩn hóa). | CHỐT (kỹ thuật) |
+| P3-6 | Model được yêu cầu để `skipped` rỗng; hệ thống tự ghi LLM_SKIPPED (giảm output token). | TẠM |
+| P3-7 | Test live chỉ chạy khi `INSIGHT_LIVE=1` **và** có key (tránh tốn tiền/không ổn định trong test thường, commit gate và CI). | TẠM |
+| P3-8 | `LlmUsage` đi qua interface `UsageSink`; store SQLite làm ở P4. Cảnh báo PRICING_MISSING / HIDDEN_THINKING / vượt ngân sách ngày chỉ log WARNING. | TẠM |
+| P3-9 | Cache hit = 0 trong các lần chạy live. **Quyết định: không dùng explicit cache.** | ĐÃ CHỐT |
+| P3-10 | Live ép OpenAI (`INSIGHT_FORCE_PROVIDER=openai`, TC-01, 29/09): MAIN + 1 REPAIR (145 reasoning token ở `low`), 2/2 item LLM, VALID, 0,00086 USD, 8,1 s. | ĐÃ KIỂM |
+
 ## Phase 2 (validation, render, TEMPLATE, assess): mặc định đã áp dụng
 
 Các mục D chưa được chốt riêng; coding agent làm theo **đề xuất mặc định** trong

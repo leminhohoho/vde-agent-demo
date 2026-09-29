@@ -1,4 +1,13 @@
-"""`MemoryMiddleware`: this agent's own context engineering over `ctx.memory`.
+"""Agent memory of the Insight Agent.
+
+`InsightMemory` / `NoOpMemory` (spec §9.5; pipeline step 2 `load()` and step 10 `save_refs()`):
+the interface of the v2 pipeline. Memory only holds references and presentation preferences, never
+numbers or conclusions, and a memory failure never fails the task. Methods are `async` (sdk R10,
+docs/OPEN_QUESTIONS.md Q5). `NoOpMemory` serves tests and `memory.enabled = false`; the store over
+`ctx.memory` comes in phase P4.
+
+`MemoryMiddleware` (legacy LangChain agent, removed in P4): this agent's own context engineering
+over `ctx.memory`.
 
 The Backend only stores and ranks notes. What is worth remembering, how it is found again and how
 it reaches the model are this agent's decisions:
@@ -19,7 +28,7 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Protocol
 
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.embeddings import Embeddings
@@ -27,7 +36,34 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from vdagent_sdk import InvocationContext, Note
 
+from .contracts import AuthorizedScope, InsightRef, MemoryContext
+
 log = logging.getLogger(__name__)
+
+
+class InsightMemory(Protocol):
+    async def load(
+        self, conversation_id: str | None, user_id: str, snapshot_id: str, authorized_scope: AuthorizedScope
+    ) -> MemoryContext:
+        """Drop expired records, INSIGHT_REFs of another snapshot (E19) and subjects outside the scope."""
+        ...
+
+    async def save_refs(self, conversation_id: str | None, refs: list[InsightRef]) -> None:
+        """One INSIGHT_REF per KEY insight, only after a VALID or PARTIAL artifact."""
+        ...
+
+
+class NoOpMemory:
+    """Remembers nothing: every load is `MemoryContext.empty()`."""
+
+    async def load(
+        self, conversation_id: str | None, user_id: str, snapshot_id: str, authorized_scope: AuthorizedScope
+    ) -> MemoryContext:
+        return MemoryContext.empty()
+
+    async def save_refs(self, conversation_id: str | None, refs: list[InsightRef]) -> None:
+        return None
+
 
 RECALL_LIMIT = 5
 MAX_FINDINGS = 3
@@ -53,9 +89,7 @@ def parse_findings(text: str) -> list[str]:
 
 
 class MemoryMiddleware(AgentMiddleware):
-    def __init__(
-        self, ctx: InvocationContext, model: BaseChatModel, embeddings: Embeddings, extract_prompt: str
-    ) -> None:
+    def __init__(self, ctx: InvocationContext, model: BaseChatModel, embeddings: Embeddings, extract_prompt: str) -> None:
         super().__init__()
         self._ctx = ctx
         self._model = model

@@ -1,0 +1,58 @@
+{
+  "artifact_id": "ART-METRIC-TC01",
+  "artifact_type": "metric",
+  "version": 1,
+  "status": "VALID",
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "payload": {
+    "metrics": [
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U011",
+          "label": "A-05.03"
+        },
+        "value": "145",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "price_spread_vs_peer_pct",
+        "calculation_ref": "dw.price_spread_vs_peer_pct@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U011",
+          "label": "A-05.03"
+        },
+        "value": "12.40",
+        "unit": "PCT"
+      },
+      {
+        "metric_id": "units_in_scope",
+        "calculation_ref": "metric.units_in_scope@1",
+        "subject": {
+          "type": "project",
+          "id": "PRJ-X",
+          "label": "Dự án X"
+        },
+        "value": "20",
+        "unit": "COUNT",
+        "n": 20
+      },
+      {
+        "metric_id": "overdue_units",
+        "calculation_ref": "metric.overdue_units@1",
+        "subject": {
+          "type": "project",
+          "id": "PRJ-X",
+          "label": "Dự án X"
+        },
+        "value": "1",
+        "unit": "COUNT",
+        "n": 20
+      }
+    ]
+  }
+}

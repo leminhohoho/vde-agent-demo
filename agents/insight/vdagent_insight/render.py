@@ -102,8 +102,30 @@ def bind_claim(
         if label is None:
             raise RenderError(f"slot {{{{{name}}}}}: candidate {candidate_id} has no value for {slot!r}")
         texts[name] = label
-    rendered = SLOT.sub(lambda m: texts[m.group(1)], template)
-    return RenderedClaim(template=template, rendered_text=rendered, numeric_bindings=bindings)
+    return RenderedClaim(
+        template=template, rendered_text=_fill(template, texts, {b.slot for b in bindings}), numeric_bindings=bindings
+    )
+
+
+def _fill(template: str, texts: Mapping[str, str], numeric: set[str]) -> str:
+    """Fill the slots; a word right after a slot that repeats the value's own last word ("{{peers}} căn"
+    with "12 căn") is written once."""
+    out: list[str] = []
+    pos = 0
+    for m in SLOT.finditer(template):
+        if m.start() < pos:
+            continue
+        out.append(template[pos : m.start()])
+        text = texts[m.group(1)]
+        out.append(text)
+        pos = m.end()
+        last = text.rsplit(" ", 1)[-1]
+        if m.group(1) in numeric and " " in text and last.isalpha():
+            repeat = re.match(rf" {re.escape(last)}(?!\w)", template[pos:])
+            if repeat:
+                pos += repeat.end()
+    out.append(template[pos:])
+    return "".join(out)
 
 
 def fallback_template(candidate: InsightCandidate, cfg: SemanticConfig) -> str:

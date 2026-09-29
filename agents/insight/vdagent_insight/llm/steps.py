@@ -28,7 +28,7 @@ from ..validation import Violation
 from .base import LlmClient, TokenCounter
 from .calls import call_with_fallback
 from .preflight import preflight
-from .prompt import candidate_aliases, repair_prompt, resolve_aliases, system_prompt, user_prompt
+from .prompt import candidate_aliases, normalised_slot_count, repair_prompt, resolve_aliases, system_prompt, user_prompt
 from .usage import usage_warnings
 
 log = logging.getLogger("vdagent.plugin.vdagent_insight")
@@ -55,6 +55,8 @@ class LlmStepsResult:
     warnings: list[str] = field(default_factory=list)
     input_tokens: int = 0
     raw_outputs: list[str] = field(default_factory=list)
+    slot_normalisations: int = 0
+    """Slot names written as `{{name}}` that had to be normalised (accepted, counted, logged)."""
 
 
 def _draft(output: object) -> LlmInsightDraft | None:
@@ -98,6 +100,7 @@ async def run_llm_steps(
     answered = _draft(main.output)  # as the model wrote it, with aliases
     draft = resolve_aliases(answered, aliases) if answered else None
     if answered is not None:
+        result.slot_normalisations += normalised_slot_count(answered)
         result.raw_outputs.append(answered.model_dump_json())
     elif main.raw is not None:
         result.raw_outputs.append(main.raw)
@@ -119,10 +122,13 @@ async def run_llm_steps(
         repaired = _draft(repair.output)
         if repaired is not None:
             draft, result.repaired = resolve_aliases(repaired, aliases), True
+            result.slot_normalisations += normalised_slot_count(repaired)
             result.raw_outputs.append(repaired.model_dump_json())
         elif repair.raw is not None:
             result.raw_outputs.append(repair.raw)
 
+    if result.slot_normalisations:
+        log.warning("INSIGHT_SLOT_NAME_NORMALISED count=%d", result.slot_normalisations)
     result.narration = narrate(pf.kept, draft, cfg, ctx.view, ctx.request, max_items=limits.max_selected_insights)
     for u in result.usages:
         for warning in usage_warnings(u, llm):

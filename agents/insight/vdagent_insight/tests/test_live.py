@@ -1,6 +1,7 @@
 """Live runs against the real providers (phase P3): TC-01 (SAPPHIRE1-16.231) and TC-04 (The Beverly).
 
 Run:  INSIGHT_LIVE=1 uv run pytest agents/insight -m live -s
+Force one provider (no fallback):  INSIGHT_FORCE_PROVIDER=openai (or gemini)
 Each run appends a JSON line (per case: main error, repair, narrative mode, cost, latency, sample
 sentences) to the file named by INSIGHT_LIVE_LOG, when set. Budget: a few thousand tokens per case.
 """
@@ -20,9 +21,8 @@ from ..artifacts import FixtureArtifactReader
 from ..assess import assess
 from ..candidates import build_context, generate_candidates
 from ..contracts import InsightTaskRequest, MemoryContext
-from ..llm.gemini_client import GeminiClient
-from ..llm.openai_client import OpenAIClient
-from ..llm.steps import LlmProviders, run_llm_steps
+from ..llm.providers import build_providers
+from ..llm.steps import run_llm_steps
 from ..llm.usage import task_cost
 from ..settings import CONFIG_DIR, SemanticConfigRegistry, load_llm_config
 from .conftest import live_env
@@ -36,10 +36,9 @@ MAX_COST_PER_CASE = Decimal("0.05")
 
 @pytest.mark.parametrize("case", ["tc01", "tc04"])
 async def test_live_pipeline_to_step_9(case: str) -> None:
-    env = live_env()
+    force = os.environ.get("INSIGHT_FORCE_PROVIDER", "")
     llm = load_llm_config(CONFIG_DIR / "llm.yaml")
-    gemini = GeminiClient.from_key(env["GEMINI_API_KEY"], llm)
-    providers = LlmProviders(gemini, OpenAIClient.from_key(env["OPENAI_API_KEY"], llm, env.get("OPENAI_BASE_URL")), gemini)
+    providers = build_providers({**live_env(), "INSIGHT_FORCE_PROVIDER": force}, llm)
 
     folder = FIXTURES / case
     request = InsightTaskRequest.model_validate_json((folder / "request.json").read_text(encoding="utf-8"))
@@ -60,11 +59,15 @@ async def test_live_pipeline_to_step_9(case: str) -> None:
             )
         assert VI_DIACRITIC.search(item.claim.rendered_text) and "{{" not in item.claim.rendered_text
     assert steps.usages and all(u.cost_usd is not None for u in steps.usages)
+    if force:
+        assert {u.provider for u in steps.usages} == {force}
     cost = task_cost(steps.usages) or Decimal(0)
     assert cost < MAX_COST_PER_CASE
 
     summary = {
         "case": case,
+        "forced_provider": force or None,
+        "slot_normalisations": steps.slot_normalisations,
         "main_error": steps.main_error,
         "repaired": steps.repaired,
         "narrative_mode": result.payload.summary.narrative_mode,

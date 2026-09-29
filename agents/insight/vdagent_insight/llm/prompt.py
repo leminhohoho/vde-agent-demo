@@ -98,6 +98,15 @@ def _candidates_json(candidates: list[InsightCandidate], cfg: SemanticConfig) ->
     return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
 
 
+def _bare(slot: str) -> str:
+    return slot.strip().removeprefix("{{").removesuffix("}}").strip()
+
+
+def normalised_slot_count(draft: LlmInsightDraft) -> int:
+    """How many slot names `resolve_aliases` has to strip of `{{ }}` (counted and logged)."""
+    return sum(s.slot != _bare(s.slot) for item in draft.selected for s in item.slots)
+
+
 def resolve_aliases(draft: LlmInsightDraft, aliases: dict[str, str]) -> LlmInsightDraft:
     """Map `c1`… back to the real ids; unknown aliases stay as written (the validator flags them).
     Slot names written as `{{name}}` are normalised to `name` (a formatting slip seen live)."""
@@ -114,7 +123,7 @@ def resolve_aliases(draft: LlmInsightDraft, aliases: dict[str, str]) -> LlmInsig
         item["candidate_ids"] = [real(c) for c in item["candidate_ids"]]
         for s in item["slots"]:
             s["ref"] = ref(s["ref"])
-            s["slot"] = s["slot"].strip().removeprefix("{{").removesuffix("}}").strip()
+            s["slot"] = _bare(s["slot"])
     for s in data["skipped"]:
         s["candidate_id"] = real(s["candidate_id"])
     return LlmInsightDraft.model_validate(data)

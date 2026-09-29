@@ -8,7 +8,15 @@ import re
 from ..candidates.common import CandidateContext
 from ..candidates.t1_unit import t1_candidates
 from ..contracts import InsightCandidate, LlmInsightDraft, MemoryContext
-from ..llm.prompt import PROMPTS_DIR, candidate_aliases, repair_prompt, resolve_aliases, system_prompt, user_prompt
+from ..llm.prompt import (
+    PROMPTS_DIR,
+    candidate_aliases,
+    normalised_slot_count,
+    repair_prompt,
+    resolve_aliases,
+    system_prompt,
+    user_prompt,
+)
 from ..validation import Violation
 from .builders import cause, context, dataset, diagnostic, inventory, llm, semantic, unit
 
@@ -101,3 +109,16 @@ def test_slot_names_written_with_braces_are_normalised() -> None:
 
 def test_the_system_prompt_shows_a_literal_slot_entry() -> None:
     assert '{"slot":"dom","ref":"c1.dom"}' in system_prompt(semantic(), llm())
+
+
+def test_braced_slot_names_are_counted() -> None:
+    draft = LlmInsightDraft.model_validate(
+        {
+            "selected": [
+                {"candidate_ids": ["c1"], "template": "{{unit}} {{dom}}",
+                 "slots": [{"slot": "{{unit}}", "ref": "c1.unit"}, {"slot": "dom", "ref": "c1.dom"}]}
+            ],
+            "skipped": [],
+        }
+    )  # fmt: skip
+    assert normalised_slot_count(draft) == 1

@@ -6,8 +6,10 @@ Column names follow DW Schema v3.1.0 (see contracts.py "Input artifact payloads"
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
+from ..candidates.common import CandidateContext
 from ..contracts import (
     AnalysisScope,
     CauseRow,
@@ -16,12 +18,16 @@ from ..contracts import (
     DqFieldResult,
     DqPayload,
     InsightCandidate,
+    InsightTaskRequest,
     InventoryRow,
+    MetricPayload,
     ProjectRow,
     UnitRow,
     ZoneRow,
 )
-from ..settings import CONFIG_DIR, SemanticConfig, load_semantic_config
+from ..gate import run_gate
+from ..settings import CONFIG_DIR, LlmConfig, SemanticConfig, load_llm_config, load_semantic_config
+from ..view import DatasetView
 
 SNAP = "SNAP-20260630-01"
 DATE_KEY = 20260630
@@ -29,6 +35,10 @@ DATE_KEY = 20260630
 
 def semantic() -> SemanticConfig:
     return load_semantic_config(CONFIG_DIR / "semantic_insight.yaml")
+
+
+def llm() -> LlmConfig:
+    return load_llm_config(CONFIG_DIR / "llm.yaml")
 
 
 def project(**kw: Any) -> ProjectRow:
@@ -181,3 +191,67 @@ def candidate(candidate_id: str, task: str = "T1", priority: str = "0.5", subjec
             "priority": priority,
         }
     )
+
+
+AS_OF = datetime.fromisoformat("2026-07-01T00:00:00+07:00")
+RUN_ID = "0f8fad5b-d9cb-469f-a165-70867728950e"
+TASK_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+HASH = "a" * 64
+
+
+def request(
+    tasks: Sequence[str] = ("T1", "T6", "T7"), analysis_scope: AnalysisScope | None = None, **kw: Any
+) -> InsightTaskRequest:
+    s = analysis_scope or scope("PROJECT", project_ids=["PRJ-X"])
+    data: dict[str, Any] = {
+        "run_id": RUN_ID,
+        "task_id": TASK_ID,
+        "attempt": 1,
+        "fencing_token": 1,
+        "intent": "SLOW_MOVING_INVESTIGATION",
+        "tasks": list(tasks),
+        "question_normalized": "Vì sao căn bán chậm?",
+        "analysis_scope": s.model_dump(),
+        "snapshot_id": SNAP,
+        "semantic_config_version": semantic().version,
+        "user_context": {
+            "user_id": "u_1",
+            "role": "SALES_OPS",
+            "authorized_scope": {"project_ids": ["PRJ-X"], "zone_ids": []},
+        },
+        "input_artifact_refs": [
+            {"artifact_id": "ART-DATASET", "artifact_type": "dataset", "version": 1, "status": "VALID", "content_hash": HASH}
+        ],
+    }
+    return InsightTaskRequest.model_validate({**data, **kw})
+
+
+def context(
+    data: DatasetPayload,
+    dq_payload: DqPayload | None = None,
+    tasks: Sequence[str] = ("T1", "T6", "T7"),
+    analysis_scope: AnalysisScope | None = None,
+    cfg: SemanticConfig | None = None,
+    metric: MetricPayload | None = None,
+    as_of: datetime = AS_OF,
+    recent_subject_ids: frozenset[str] = frozenset(),
+) -> CandidateContext:
+    cfg = cfg or semantic()
+    req = request(tasks, analysis_scope)
+    view = DatasetView(data)
+    gate = run_gate(view, dq_payload or dq(), req.analysis_scope, cfg, as_of)
+    return CandidateContext(
+        request=req,
+        cfg=cfg,
+        view=view,
+        gate=gate,
+        dataset_id="ART-DATASET",
+        metric=metric,
+        metric_id="ART-METRIC" if metric else None,
+        recent_subject_ids=recent_subject_ids,
+        recent_subject_boost=llm().memory.recent_subject_boost,
+    )
+
+
+def with_params(cfg: SemanticConfig, **params: Any) -> SemanticConfig:
+    return cfg.model_copy(update={"params": cfg.params.model_copy(update=params)})

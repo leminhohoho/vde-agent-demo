@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from vdagent_sdk import PluginConfigError
 
-from .contracts import Dec
+from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, ProjectRow
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"  # agents/<name>/.env
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"  # agents/<name>/config
@@ -170,6 +170,7 @@ class SemanticParams(_Config):
     max_key_insights: int
     attribution_sum_tolerance: Dec
     max_units_in_context: int
+    unit_examples_per_cause: int
     min_cause_share_pct: Dec
     conflict_tolerance_pct: Dec
     significance_confidence_pct: Dec
@@ -184,6 +185,26 @@ class _ParamEntry(_Config):
     source: str
 
 
+EvidenceTable = Literal["dm_unit_friction_diagnostics", "fact_unit_inventory_snapshot", "dim_project_profile"]
+EVIDENCE_TABLE_MODELS: dict[str, type[BaseModel]] = {
+    "dm_unit_friction_diagnostics": DiagnosticRow,
+    "fact_unit_inventory_snapshot": InventoryRow,
+    "dim_project_profile": ProjectRow,
+}
+
+
+class EvidenceSpec(_Config):
+    """One DW column backing a cause (spec 6.2 "Bằng chứng tối thiểu")."""
+
+    slot: str
+    table: EvidenceTable
+    field: str
+    unit: BindingUnit | None = None
+    """None: evidence only (e.g. a boolean flag), no numeric slot."""
+    noun: str | None = None
+    signed: bool = False
+
+
 class CauseEntry(_Config):
     cause_code: str
     cause_label_vi: str
@@ -191,6 +212,12 @@ class CauseEntry(_Config):
     template: str
     """TEMPLATE fallback sentence for ROOT_CAUSE_SIGNAL (spec 8.2)."""
     recommendation_text: str
+    required_evidence: list[EvidenceSpec]
+    """Missing or DQ-FAIL → the candidate is rejected (EVIDENCE_FIELD_MISSING)."""
+    supplementary_evidence: list[EvidenceSpec] = []
+    """Used when present and not excluded by the gate."""
+    uses_peer_group: bool = False
+    """The claim compares with the DW peer group: peer tiers and BR-07 apply."""
 
 
 class _SemanticRaw(_Config):
@@ -245,6 +272,10 @@ def load_semantic_config(path: Path) -> SemanticConfig:
     duplicates = sorted({c for c in codes if codes.count(c) > 1})
     if duplicates:
         raise ConfigError(f"{path.name}: duplicate cause_code {', '.join(duplicates)}")
+    for entry in raw.causes:
+        for spec in (*entry.required_evidence, *entry.supplementary_evidence):
+            if spec.field not in EVIDENCE_TABLE_MODELS[spec.table].model_fields:
+                raise ConfigError(f"{path.name}: {entry.cause_code}: {spec.table} has no column {spec.field}")
     return SemanticConfig(
         version=raw.version,
         params=params,

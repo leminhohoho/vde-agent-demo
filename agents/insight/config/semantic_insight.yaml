@@ -130,6 +130,15 @@ semantic_config:
     CONFLICT: "Hai nguồn dữ liệu cho {{subject}} chưa nhất quán về yếu tố chính; cần kiểm tra lại trước khi kết luận."
     NO_OVERDUE_UNITS: "Không có căn quá hạn trong phạm vi {{scope}} tại kỳ dữ liệu này."
 
+  # T3 dimensions (spec 6.2): each groups the unsold units of the scope by one column.
+  pattern_dimensions:
+    - {name: floor_band, table: dim_unit_master}
+    - {name: balcony_orientation, table: dim_unit_master}
+    - {name: view_primary_type, table: dim_unit_master}
+    - {name: unit_type, table: dim_unit_master}
+    - {name: launch_batch_id, table: fact_unit_inventory_snapshot}
+    - {name: channel_key, table: fact_unit_inventory_snapshot}
+
   # GR-02 / GR-06, matched after Unicode NFC + lowercase. URLs are rejected by the validator itself.
   forbidden_phrases:
     - "chắc chắn do"

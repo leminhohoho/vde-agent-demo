@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from vdagent_sdk import PluginConfigError
 
-from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, ProjectRow
+from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, ProjectRow, UnitRow
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"  # agents/<name>/.env
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"  # agents/<name>/config
@@ -220,6 +220,16 @@ class CauseEntry(_Config):
     """The claim compares with the DW peer group: peer tiers and BR-07 apply."""
 
 
+PATTERN_TABLE_MODELS: dict[str, type[BaseModel]] = {"dim_unit_master": UnitRow, "fact_unit_inventory_snapshot": InventoryRow}
+
+
+class PatternDimension(_Config):
+    """One T3 grouping column (spec 6.2)."""
+
+    name: str
+    table: Literal["dim_unit_master", "fact_unit_inventory_snapshot"]
+
+
 class _SemanticRaw(_Config):
     version: str = Field(min_length=1)
     params: dict[str, _ParamEntry]
@@ -227,6 +237,7 @@ class _SemanticRaw(_Config):
     insight_templates: dict[str, str]
     forbidden_phrases: list[str]
     english_whitelist: list[str]
+    pattern_dimensions: list[PatternDimension]
 
 
 class _SemanticFile(_Config):
@@ -242,6 +253,7 @@ class SemanticConfig(_Config):
     forbidden_phrases: tuple[str, ...]
     """NFC + lowercase, ready for GR-02 matching."""
     english_whitelist: tuple[str, ...]
+    pattern_dimensions: tuple[PatternDimension, ...]
 
     @property
     def allowed_cause_codes(self) -> frozenset[str]:
@@ -276,6 +288,9 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         for spec in (*entry.required_evidence, *entry.supplementary_evidence):
             if spec.field not in EVIDENCE_TABLE_MODELS[spec.table].model_fields:
                 raise ConfigError(f"{path.name}: {entry.cause_code}: {spec.table} has no column {spec.field}")
+    for dim in raw.pattern_dimensions:
+        if dim.name not in PATTERN_TABLE_MODELS[dim.table].model_fields:
+            raise ConfigError(f"{path.name}: pattern dimension: {dim.table} has no column {dim.name}")
     return SemanticConfig(
         version=raw.version,
         params=params,
@@ -284,6 +299,7 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         insight_templates=dict(raw.insight_templates),
         forbidden_phrases=tuple(normalize_phrase(p) for p in raw.forbidden_phrases),
         english_whitelist=tuple(raw.english_whitelist),
+        pattern_dimensions=tuple(raw.pattern_dimensions),
     )
 
 

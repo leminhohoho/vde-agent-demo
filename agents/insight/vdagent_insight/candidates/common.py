@@ -15,6 +15,7 @@ from ..contracts import (
     ConfidenceLevel,
     InsightCandidate,
     InsightTaskRequest,
+    MarketContextPayload,
     MetricPayload,
     NumericBinding,
     RejectedCandidate,
@@ -38,6 +39,8 @@ class CandidateContext:
     dataset_id: str
     metric: MetricPayload | None = None
     metric_id: str | None = None
+    market: MarketContextPayload | None = None
+    market_id: str | None = None
     recent_subject_ids: frozenset[str] = frozenset()
     """Subjects of INSIGHT_REFs in memory (§9.5): priority boost only."""
     recent_subject_boost: Decimal = Decimal(0)

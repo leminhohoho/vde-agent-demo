@@ -588,6 +588,28 @@ class MetricValue(Contract):
     n: int | None = None
 
 
+class MacroRow(Contract):
+    """fact_market_macro_monthly."""
+
+    macro_record_id: str
+    date_key: int
+    """Last day of the month, YYYYMMDD."""
+    market_id: str
+    segment: str
+    floating_mortgage_rate_pct: Dec
+    months_of_inventory_moi: Dec | None
+    absorption_rate_pct: Dec
+    median_household_income_vnd: int
+    macro_price_to_income_ratio: Dec | None
+
+
+class MarketContextPayload(Contract):
+    """`market_context` artifact (optional input, T5)."""
+
+    source_refs: list[str]
+    fact_market_macro_monthly: list[MacroRow]
+
+
 class MetricPayload(Contract):
     """`metric` artifact."""
 

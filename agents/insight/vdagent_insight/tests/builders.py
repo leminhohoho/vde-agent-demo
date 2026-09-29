@@ -20,6 +20,8 @@ from ..contracts import (
     InsightCandidate,
     InsightTaskRequest,
     InventoryRow,
+    MacroRow,
+    MarketContextPayload,
     MetricPayload,
     ProjectRow,
     UnitRow,
@@ -233,6 +235,7 @@ def context(
     analysis_scope: AnalysisScope | None = None,
     cfg: SemanticConfig | None = None,
     metric: MetricPayload | None = None,
+    market_payload: MarketContextPayload | None = None,
     as_of: datetime = AS_OF,
     recent_subject_ids: frozenset[str] = frozenset(),
 ) -> CandidateContext:
@@ -248,6 +251,8 @@ def context(
         dataset_id="ART-DATASET",
         metric=metric,
         metric_id="ART-METRIC" if metric else None,
+        market=market_payload,
+        market_id="ART-MARKET" if market_payload else None,
         recent_subject_ids=recent_subject_ids,
         recent_subject_boost=llm().memory.recent_subject_boost,
     )
@@ -255,3 +260,24 @@ def context(
 
 def with_params(cfg: SemanticConfig, **params: Any) -> SemanticConfig:
     return cfg.model_copy(update={"params": cfg.params.model_copy(update=params)})
+
+
+def macro(
+    date_key: int, rate: str = "8.50", absorption: str = "30.00", moi: str | None = "14.5", pir: str | None = "18.2", **kw: Any
+) -> MacroRow:
+    data: dict[str, Any] = {
+        "macro_record_id": f"MAC-{date_key}-{kw.get('market_id', 'MKT-EAST-HCM')}-{kw.get('segment', 'MID_HIGH')}",
+        "date_key": date_key,
+        "market_id": "MKT-EAST-HCM",
+        "segment": "MID_HIGH",
+        "floating_mortgage_rate_pct": rate,
+        "months_of_inventory_moi": moi,
+        "absorption_rate_pct": absorption,
+        "median_household_income_vnd": 300_000_000,
+        "macro_price_to_income_ratio": pir,
+    }
+    return MacroRow.model_validate({**data, **kw})
+
+
+def market(rows: Sequence[MacroRow]) -> MarketContextPayload:
+    return MarketContextPayload(source_refs=[f"fact_market_macro_monthly@{SNAP}"], fact_market_macro_monthly=list(rows))

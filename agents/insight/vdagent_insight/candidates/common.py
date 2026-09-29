@@ -22,7 +22,7 @@ from ..contracts import (
     TaskCode,
 )
 from ..formatting import format_value
-from ..gate import FieldAssessment, GateResult, cap, downgrade
+from ..gate import FieldAssessment, GateResult, ScopeAssessment, cap, downgrade
 from ..settings import SemanticConfig
 from ..view import DatasetView, UnitView, json_path
 
@@ -37,6 +37,7 @@ class CandidateContext:
     view: DatasetView
     gate: GateResult
     dataset_id: str
+    dq_id: str | None = None
     metric: MetricPayload | None = None
     metric_id: str | None = None
     market: MarketContextPayload | None = None
@@ -108,6 +109,13 @@ def apply_freshness(level: ConfidenceLevel, flags: list[str], gate: GateResult) 
 def cap_single_source(level: ConfidenceLevel, source_tables: set[str]) -> ConfidenceLevel:
     """HIGH needs evidence from at least two independent sources (§5.2): here, two DW tables."""
     return level if len(source_tables) >= 2 else cap(level, "MEDIUM")
+
+
+def requested_scopes(ctx: CandidateContext) -> list[ScopeAssessment]:
+    """Zone scopes for a ZONE request, project scopes for PROJECT/MARKET, none for UNIT (T2 levels)."""
+    level = ctx.request.analysis_scope.level
+    wanted = "ZONE" if level == "ZONE" else "PROJECT" if level in ("PROJECT", "MARKET") else None
+    return [s for (lvl, _), s in sorted(ctx.gate.scopes.items()) if lvl == wanted]
 
 
 # ---- mart–bridge consistency (BR-03, BR-04) ----------------------------------------------------

@@ -249,6 +249,7 @@ def context(
         view=view,
         gate=gate,
         dataset_id="ART-DATASET",
+        dq_id="ART-DQ",
         metric=metric,
         metric_id="ART-METRIC" if metric else None,
         market=market_payload,

@@ -22,7 +22,7 @@ from decimal import Decimal
 
 from ..contracts import CandidateLineage, InsightCandidate, Subject
 from ..gate import HUNDRED, ScopeAssessment
-from .common import CandidateBatch, CandidateContext, binding, computed_ref
+from .common import CandidateBatch, CandidateContext, binding, computed_ref, requested_scopes
 from .priority import base_priority, boosted
 
 BRIDGE = "unit_diagnostic_causes"
@@ -65,12 +65,6 @@ def cause_distribution(ctx: CandidateContext, scope: ScopeAssessment) -> list[Ca
         for code in weights
     ]
     return sorted(shares, key=lambda s: (-s.weighted_share_pct, s.cause_code))
-
-
-def _scopes(ctx: CandidateContext) -> list[ScopeAssessment]:
-    level = ctx.request.analysis_scope.level
-    wanted = "ZONE" if level == "ZONE" else "PROJECT" if level in ("PROJECT", "MARKET") else None
-    return [s for (lvl, _), s in sorted(ctx.gate.scopes.items()) if lvl == wanted]
 
 
 def _candidate(ctx: CandidateContext, scope: ScopeAssessment, share: CauseShare) -> InsightCandidate:
@@ -118,7 +112,7 @@ def t2_candidates(ctx: CandidateContext) -> CandidateBatch:
     if not ctx.wants("T2"):
         return batch
     min_share = ctx.cfg.params.min_cause_share_pct
-    for scope in _scopes(ctx):
+    for scope in requested_scopes(ctx):
         if scope.overdue_units == 0:
             continue
         blocker = scope.coverage if scope.coverage.excluded else scope.sample if scope.sample.excluded else None

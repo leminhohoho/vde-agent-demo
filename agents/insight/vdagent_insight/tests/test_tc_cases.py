@@ -94,11 +94,13 @@ async def test_every_case_is_deterministic(case: str) -> None:
 
 
 async def test_tc01_happy_path() -> None:
+    """SAPPHIRE1-16.231 (data pack): 143 days, +19.82 % vs 12 unconstrained peers."""
     _, batch = await run("tc01")
-    (c,) = root_causes(batch)
-    assert (c.cause_code, c.subject.label) == ("OVERPRICED_VS_PEER", "A-05.03")
-    assert (c.slots["dom"].value, c.slots["spread"].value) == (Decimal(145), Decimal("12.40"))
-    assert c.evidence_refs and c.action_code == "TARGETED_PRICE_CORRECTION" and c.confidence == "HIGH"
+    c = root_causes(batch)[0]
+    assert (c.cause_code, c.subject.label, c.severity_rank) == ("OVERPRICED_VS_PEER", "SAPPHIRE1-16.231", 1)
+    assert (c.slots["dom"].value, c.slots["spread"].value, c.slots["peers"].value) == (Decimal(143), Decimal("19.82"), 12)
+    assert c.evidence_refs and c.action_code == "TARGETED_PRICE_CORRECTION"
+    assert (c.confidence, c.significant) == ("HIGH", True)
 
 
 async def test_tc02_three_causes_in_rank_order() -> None:
@@ -137,9 +139,10 @@ async def test_tc03_zone_distribution_by_both_methods() -> None:
 async def test_tc04_legal_barrier_at_project_level_first() -> None:
     _, batch = await run("tc04")
     first = batch.candidates[0]
-    assert (first.cause_code, first.level, first.subject.id) == ("LEGAL_PERMIT_BARRIER", "PROJECT", "PRJ-X")
-    assert first.action_code == "EXPEDITE_LEGAL_PROCEDURES" and first.slots["overdue_units"].value == 3
-    assert [c for c in root_causes(batch) if c.level == "UNIT"] == []
+    assert (first.cause_code, first.level, first.subject.id) == ("LEGAL_PERMIT_BARRIER", "PROJECT", "PRJ-VHOP-BEVERLY")
+    assert first.action_code == "EXPEDITE_LEGAL_PROCEDURES" and first.slots["overdue_units"].value == 20
+    assert "CONFLICT" not in first.dq_flags  # The Beverly has no sales permit
+    assert [c for c in root_causes(batch) if c.level == "UNIT" and c.cause_code == "LEGAL_PERMIT_BARRIER"] == []
 
 
 async def test_tc05_no_diagnosis_at_the_boundary_or_for_sold_and_booked_units() -> None:

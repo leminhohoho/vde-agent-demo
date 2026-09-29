@@ -9,30 +9,30 @@
     "T6",
     "T7"
   ],
-  "question_normalized": "Vì sao căn A-05.03 bán chậm?",
+  "question_normalized": "Vì sao căn SAPPHIRE1-16.231 bán chậm?",
   "analysis_scope": {
     "level": "UNIT",
     "project_ids": [
-      "PRJ-X"
+      "PRJ-VHOP"
     ],
     "zone_ids": [
-      "ZN-AQUA-01"
+      "ZN-SAPPHIRE1"
     ],
     "unit_ids": [
-      "U011"
+      "U00231"
     ]
   },
   "snapshot_id": "SNAP-20260630-01",
   "semantic_config_version": "3.1.0",
   "user_context": {
-    "user_id": "u_sales_ops_1",
+    "user_id": "usr_sales_ops_01",
     "role": "SALES_OPS",
     "authorized_scope": {
       "project_ids": [
-        "PRJ-X"
+        "PRJ-VHOP"
       ],
       "zone_ids": [
-        "ZN-AQUA-01"
+        "ZN-SAPPHIRE1"
       ]
     }
   },
@@ -42,25 +42,24 @@
       "artifact_type": "metric",
       "version": 1,
       "status": "VALID",
-      "content_hash": "262b210f5ec113f5bca7ee38cddfd371df2c765c1210b7171b4e5b66a29210f9"
+      "content_hash": "a1c836e94134c991aaa5fdb3c0fc9be2db10e38d0487ad7b1e688a1e1a7a2557"
     },
     {
       "artifact_id": "ART-DQ-TC01",
       "artifact_type": "dq",
       "version": 1,
       "status": "VALID",
-      "content_hash": "5b2108d53f003301f1bf67488d6dc6889443d9fb3b720aeb4ad3a77500bcb205"
+      "content_hash": "07657512cb1b68bc9d4a6ad6b941905529b0414440dc0f7586052fee241f6ea2"
     },
     {
       "artifact_id": "ART-DATASET-TC01",
       "artifact_type": "dataset",
       "version": 1,
       "status": "VALID",
-      "content_hash": "627c0a9e8a3d784142f38868f538f8b9fb954564284847a811f0c5fd3cdb9fb0"
+      "content_hash": "512b787c0312b4415061ce63ca7c67dee3a73e6ea63f057487130ba23c6a5ce8"
     }
   ],
   "constraints": {
-    "max_key_insights": 5,
     "language": "vi",
     "deadline_ms": 60000
   },

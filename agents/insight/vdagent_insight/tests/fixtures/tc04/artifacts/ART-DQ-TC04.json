@@ -8,7 +8,7 @@
   "payload": {
     "overall_status": "PASS",
     "snapshot_date": "2026-06-30",
-    "data_as_of": "2026-06-30T23:00:00+07:00",
+    "data_as_of": "2026-06-30T23:59:00+07:00",
     "fields": [
       {
         "table": "fact_unit_inventory_snapshot",

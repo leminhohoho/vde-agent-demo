@@ -8,50 +8,479 @@
   "payload": {
     "metrics": [
       {
-        "metric_id": "unsold_days_dom",
-        "calculation_ref": "dw.unsold_days_dom@3.1.0",
-        "subject": {
-          "type": "unit",
-          "id": "U011",
-          "label": "A-05.03"
-        },
-        "value": "145",
-        "unit": "DAY"
-      },
-      {
-        "metric_id": "price_spread_vs_peer_pct",
-        "calculation_ref": "dw.price_spread_vs_peer_pct@3.1.0",
-        "subject": {
-          "type": "unit",
-          "id": "U011",
-          "label": "A-05.03"
-        },
-        "value": "12.40",
-        "unit": "PCT"
-      },
-      {
         "metric_id": "units_in_scope",
         "calculation_ref": "metric.units_in_scope@1",
         "subject": {
           "type": "project",
-          "id": "PRJ-X",
-          "label": "Dự án X"
+          "id": "PRJ-VHOP",
+          "label": "Vinhomes Ocean Park"
         },
-        "value": "20",
+        "value": "61",
         "unit": "COUNT",
-        "n": 20
+        "n": 61
       },
       {
         "metric_id": "overdue_units",
         "calculation_ref": "metric.overdue_units@1",
         "subject": {
           "type": "project",
-          "id": "PRJ-X",
-          "label": "Dự án X"
+          "id": "PRJ-VHOP",
+          "label": "Vinhomes Ocean Park"
         },
-        "value": "1",
+        "value": "41",
         "unit": "COUNT",
-        "n": 20
+        "n": 61
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00001",
+          "label": "SAPPHIRE1-13.001"
+        },
+        "value": "213",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00002",
+          "label": "SAPPHIRE1-23.002"
+        },
+        "value": "386",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00003",
+          "label": "SAPPHIRE1-04.003"
+        },
+        "value": "190",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00004",
+          "label": "SAPPHIRE1-02.004"
+        },
+        "value": "337",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00005",
+          "label": "SAPPHIRE1-26.005"
+        },
+        "value": "316",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00006",
+          "label": "SAPPHIRE1-04.006"
+        },
+        "value": "309",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00007",
+          "label": "SAPPHIRE1-12.007"
+        },
+        "value": "305",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00008",
+          "label": "SAPPHIRE1-27.008"
+        },
+        "value": "337",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00009",
+          "label": "SAPPHIRE1-12.009"
+        },
+        "value": "203",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00010",
+          "label": "SAPPHIRE1-09.010"
+        },
+        "value": "345",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00011",
+          "label": "SAPPHIRE1-13.011"
+        },
+        "value": "160",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00012",
+          "label": "SAPPHIRE1-04.012"
+        },
+        "value": "356",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00013",
+          "label": "SAPPHIRE1-24.013"
+        },
+        "value": "231",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00014",
+          "label": "SAPPHIRE1-11.014"
+        },
+        "value": "362",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00015",
+          "label": "SAPPHIRE1-12.015"
+        },
+        "value": "165",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00016",
+          "label": "SAPPHIRE1-09.016"
+        },
+        "value": "150",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00017",
+          "label": "SAPPHIRE1-05.017"
+        },
+        "value": "365",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00018",
+          "label": "SAPPHIRE1-21.018"
+        },
+        "value": "148",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00019",
+          "label": "SAPPHIRE1-04.019"
+        },
+        "value": "260",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00020",
+          "label": "SAPPHIRE1-10.020"
+        },
+        "value": "159",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00021",
+          "label": "SAPPHIRE1-18.021"
+        },
+        "value": "221",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00022",
+          "label": "SAPPHIRE1-02.022"
+        },
+        "value": "249",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00023",
+          "label": "SAPPHIRE1-25.023"
+        },
+        "value": "350",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00024",
+          "label": "SAPPHIRE1-02.024"
+        },
+        "value": "270",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00025",
+          "label": "SAPPHIRE1-11.025"
+        },
+        "value": "157",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00026",
+          "label": "SAPPHIRE1-01.026"
+        },
+        "value": "289",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00027",
+          "label": "SAPPHIRE1-03.027"
+        },
+        "value": "337",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00028",
+          "label": "SAPPHIRE1-18.028"
+        },
+        "value": "313",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00029",
+          "label": "SAPPHIRE1-24.029"
+        },
+        "value": "307",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00030",
+          "label": "SAPPHIRE1-18.030"
+        },
+        "value": "256",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00032",
+          "label": "SAPPHIRE1-12.032"
+        },
+        "value": "371",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00035",
+          "label": "SAPPHIRE1-21.035"
+        },
+        "value": "176",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00036",
+          "label": "SAPPHIRE1-16.036"
+        },
+        "value": "378",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00040",
+          "label": "SAPPHIRE1-10.040"
+        },
+        "value": "92",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00043",
+          "label": "SAPPHIRE1-24.043"
+        },
+        "value": "246",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00046",
+          "label": "SAPPHIRE1-25.046"
+        },
+        "value": "181",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00047",
+          "label": "SAPPHIRE1-26.047"
+        },
+        "value": "151",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00049",
+          "label": "SAPPHIRE1-12.049"
+        },
+        "value": "274",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00050",
+          "label": "SAPPHIRE1-24.050"
+        },
+        "value": "160",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00051",
+          "label": "SAPPHIRE1-13.051"
+        },
+        "value": "303",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U00231",
+          "label": "SAPPHIRE1-16.231"
+        },
+        "value": "143",
+        "unit": "DAY"
       }
     ]
   }

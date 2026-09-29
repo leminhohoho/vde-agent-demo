@@ -1,0 +1,43 @@
+# Insight Agent LLM config (spec §7.5). Loaded and validated by settings.py.
+#
+# Model names, parameters and prices live here only; when a price changes, edit this file and bump
+# `version`. Decimals are QUOTED strings: a YAML float is rejected (luật 3).
+# `prompt_version` must be bumped whenever prompts/system.md or prompts/repair.md changes (luật 12).
+
+insight_llm_config:
+  version: "2026-09-28"
+  prompt_version: "insight-prompt-0.1.0"
+  primary:
+    provider: gemini
+    model_id: gemini-3.5-flash-lite
+    thinking_level: minimal        # reasoning off; no temperature
+  fallback:
+    provider: openai
+    model_id: gpt-6-luna
+    api: responses
+    reasoning_effort: none         # must be set: the model defaults to medium
+  repair:
+    reasoning: low                 # the only call allowed to reason
+    max_attempts: 1
+  limits:
+    max_candidates_in_context: 40
+    max_input_tokens: 16000
+    max_output_tokens: 2500
+    max_selected_insights: 12
+    timeout_ms: 20000
+    transient_retries: 1           # backoff 1 s, then the fallback provider
+    transient_backoff_ms: 1000
+  pricing_usd_per_1m:              # from the providers' official price pages
+    gemini-3.5-flash-lite: {input: "0.30", cached_input: "0.03", output: "2.50"}
+    gpt-6-luna: {input: "0.10", cached_input: "0.01", output: "0.50"}
+  memory:
+    enabled: true
+    max_refs_per_conversation: 20
+    conversation_ttl_days: 30
+    recent_subject_boost: "0.1"
+    job_timeout_s: 5               # extract/compact jobs, after the answer is emitted (OPEN_QUESTIONS Q4)
+    async_jobs: [extract_user_pref, compact_topics]   # call_type = MEMORY
+  budget:
+    daily_usd: "5.0"
+    run_cost_alert_multiplier: 3   # alert when a run costs > 3 × the 7-day median
+    hidden_thinking_alert_tokens: 500

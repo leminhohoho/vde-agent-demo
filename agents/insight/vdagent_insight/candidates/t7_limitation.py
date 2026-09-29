@@ -5,7 +5,8 @@ Pure. DATA_LIMITATION candidates:
 - stale inventory/price data (STALE_SNAPSHOT);
 - zone/project coverage or sample tiers, when T2 is requested (PARTIAL/LOW/INSUFFICIENT_COVERAGE,
   SMALL_SAMPLE, GROUP_TOO_SMALL);
-- per overdue unit with a peer-based cause: PEER_SAMPLE_CONSTRAINED (BR-07) or PEER_DATA_MISSING (E06);
+- overdue units with a peer-based cause: PEER_SAMPLE_CONSTRAINED (BR-07) or PEER_DATA_MISSING (E06), per
+  unit in a UNIT scope, else one per zone/project with the number of units;
 - no overdue unit in scope (E07, NO_OVERDUE_UNITS: an answer, not an error);
 - T5 requested without a `market_context` artifact (MARKET_CONTEXT_MISSING).
 
@@ -166,52 +167,67 @@ def _scope_limitations(ctx: CandidateContext) -> list[InsightCandidate]:
     return out
 
 
-def _peer_limitations(ctx: CandidateContext, overdue: list[UnitView]) -> list[InsightCandidate]:
+def _peer_problems(ctx: CandidateContext, overdue: list[UnitView]) -> list[tuple[UnitView, str]]:
+    """(unit, PEER_DATA_MISSING | PEER_SAMPLE_CONSTRAINED) for overdue units with a peer-based cause."""
     out = []
     for u in overdue:
         diag = u.diagnostic
         if diag is None or u.diagnostic_index is None:
             continue
-        peer_causes = [
-            row
-            for row, _ in u.causes
-            if row.cause_code in ctx.cfg.allowed_cause_codes and ctx.cfg.cause(row.cause_code).uses_peer_group
-        ]
-        if not peer_causes:
+        if not any(
+            row.cause_code in ctx.cfg.allowed_cause_codes and ctx.cfg.cause(row.cause_code).uses_peer_group for row, _ in u.causes
+        ):
             continue
-        row_ref = ctx.ref(MART, u.diagnostic_index)
         if diag.price_spread_vs_peer_pct is None:
-            out.append(
-                _candidate(
-                    ctx,
-                    f"C-T7-PEER_DATA_MISSING-{u.unit.unit_id}",
-                    "DATA_LIMITATION",
-                    "UNIT",
-                    _unit_subject(u),
-                    ["PEER_DATA_MISSING"],
-                    None,
-                    [row_ref],
-                    [MART],
-                )
-            )
+            out.append((u, "PEER_DATA_MISSING"))
         elif diag.is_peer_sample_constrained:
-            slots = {
-                "peers": binding("peers", diag.peer_count, "COUNT", ctx.ref(MART, u.diagnostic_index, "peer_count"), noun="căn")
-            }
-            candidate_id = f"C-T7-PEER_SAMPLE_CONSTRAINED-{u.unit.unit_id}"
+            out.append((u, "PEER_SAMPLE_CONSTRAINED"))
+    return out
+
+
+def _group_subject(ctx: CandidateContext, u: UnitView) -> tuple[Level, Subject]:
+    if ctx.request.analysis_scope.level == "ZONE" and u.zone is not None:
+        return "ZONE", Subject(type="zone", id=u.zone.zone_id, label=u.zone.zone_name)
+    if u.project is not None:
+        return "PROJECT", Subject(type="project", id=u.project.project_id, label=u.project.project_name)
+    return "MARKET", Subject(type="market", id="MARKET", label="thị trường")
+
+
+def _peer_limitations(ctx: CandidateContext, overdue: list[UnitView]) -> list[InsightCandidate]:
+    """Per unit in a UNIT scope; in a ZONE/PROJECT scope one candidate per zone/project and flag, with
+    the number of units (the data pack has dozens of constrained units per tower)."""
+    problems = _peer_problems(ctx, overdue)
+    out = []
+    if ctx.request.analysis_scope.level == "UNIT":
+        for u, flag in problems:
+            assert u.diagnostic is not None and u.diagnostic_index is not None
+            slots = None
+            if flag == "PEER_SAMPLE_CONSTRAINED":
+                ref = ctx.ref(MART, u.diagnostic_index, "peer_count")
+                slots = {"peers": binding("peers", u.diagnostic.peer_count, "COUNT", ref, noun="căn")}
             out.append(
                 _candidate(
                     ctx,
-                    candidate_id,
+                    f"C-T7-{flag}-{u.unit.unit_id}",
                     "DATA_LIMITATION",
                     "UNIT",
                     _unit_subject(u),
-                    ["PEER_SAMPLE_CONSTRAINED"],
+                    [flag],
                     slots,
-                    [row_ref],
+                    [ctx.ref(MART, u.diagnostic_index)],
                     [MART],
                 )
             )
+        return out
+    groups: dict[tuple[str, str], tuple[Level, Subject, list[UnitView]]] = {}
+    for u, flag in problems:
+        level, subject = _group_subject(ctx, u)
+        groups.setdefault((flag, subject.id), (level, subject, []))[2].append(u)
+    for (flag, subject_id), (level, subject, units) in sorted(groups.items()):
+        candidate_id = f"C-T7-{flag}-{subject_id}"
+        slots = {"units": binding("units", len(units), "COUNT", computed_ref(candidate_id, "units"), noun="căn")}
+        evidence = [ctx.ref(MART, u.diagnostic_index) for u in units if u.diagnostic_index is not None]
+        out.append(_candidate(ctx, candidate_id, "DATA_LIMITATION", level, subject, [flag], slots, evidence, [MART]))
     return out
 
 

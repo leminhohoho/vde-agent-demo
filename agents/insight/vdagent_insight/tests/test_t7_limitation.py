@@ -77,14 +77,22 @@ def test_tc21_partial_zone_coverage_is_a_limitation_with_its_denominator() -> No
     )
 
 
-def test_constrained_or_missing_peer_data_is_reported_per_unit() -> None:
-    data = dataset(
-        [unit(1), unit(2)],
-        [inventory(1, 120), inventory(2, 130)],
-        [diagnostic(1, 120, is_peer_sample_constrained=True, peer_count=3), diagnostic(2, 130, price_spread_vs_peer_pct=None)],
-        [cause(1, "OVERPRICED_VS_PEER"), cause(2, "OVERPRICED_VS_PEER")],
+def peer_problems(extra: int = 0) -> DatasetPayload:
+    """U001 constrained (3 peers), U002 without peer data, then `extra` more constrained units."""
+    ids = [1, 2, *range(3, 3 + extra)]
+    diags = [diagnostic(1, 120, is_peer_sample_constrained=True, peer_count=3), diagnostic(2, 130, price_spread_vs_peer_pct=None)]
+    diags += [diagnostic(i, 140, is_peer_sample_constrained=True, peer_count=2) for i in ids[2:]]
+    return dataset(
+        [unit(i) for i in ids],
+        [inventory(1, 120), inventory(2, 130), *(inventory(i, 140) for i in ids[2:])],
+        diags,
+        [cause(i, "OVERPRICED_VS_PEER") for i in ids],
     )
-    found = by_id(t7_candidates(context(data, tasks=TASKS)).candidates)
+
+
+def test_constrained_or_missing_peer_data_is_reported_per_unit_in_a_unit_scope() -> None:
+    unit_scope = scope("UNIT", unit_ids=["U001", "U002"])
+    found = by_id(t7_candidates(context(peer_problems(), tasks=UNIT_TASKS, analysis_scope=unit_scope)).candidates)
     constrained = found["C-T7-PEER_SAMPLE_CONSTRAINED-U001"]
     assert constrained.dq_flags == ["PEER_SAMPLE_CONSTRAINED"] and constrained.slots["peers"].value == 3
     assert found["C-T7-PEER_DATA_MISSING-U002"].dq_flags == ["PEER_DATA_MISSING"]
@@ -165,3 +173,18 @@ def test_requested_market_context_without_an_artifact_is_a_limitation() -> None:
 def test_nothing_without_t7() -> None:
     data = dataset([unit(1)], [inventory(1, 40)])
     assert t7_candidates(context(data, tasks=("T1",))).candidates == []
+
+
+def test_in_a_zone_or_project_scope_peer_problems_are_one_limitation_each() -> None:
+    """The data pack has dozens of constrained units per tower: one limitation per scope, not per unit."""
+    found = by_id(t7_candidates(context(peer_problems(extra=30), tasks=TASKS)).candidates)
+    assert not [c for c in found if c.startswith("C-T7-PEER_SAMPLE_CONSTRAINED-U")]
+    constrained = found["C-T7-PEER_SAMPLE_CONSTRAINED-PRJ-X"]
+    assert (constrained.level, constrained.subject.type, constrained.subject.id) == ("PROJECT", "project", "PRJ-X")
+    assert constrained.slots["units"].value == 31 and constrained.slots["units"].display == "31 căn"
+    assert len(constrained.evidence_refs) == 31 and constrained.dq_flags == ["PEER_SAMPLE_CONSTRAINED"]
+    missing = found["C-T7-PEER_DATA_MISSING-PRJ-X"]
+    assert missing.slots["units"].value == 1 and missing.dq_flags == ["PEER_DATA_MISSING"]
+    zone_scope = scope("ZONE", zone_ids=["ZN-AQUA-01"])
+    zone = by_id(t7_candidates(context(peer_problems(extra=3), tasks=TASKS, analysis_scope=zone_scope)).candidates)
+    assert zone["C-T7-PEER_SAMPLE_CONSTRAINED-ZN-AQUA-01"].level == "ZONE"

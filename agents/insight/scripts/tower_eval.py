@@ -69,7 +69,13 @@ async def main() -> int:
         steps = await run_llm_steps(ctx, batch.candidates, rt.providers, rt.llm, MemoryContext.empty())
         by_id = {c.candidate_id: c for c in steps.kept}
         aliases = candidate_aliases(steps.kept)
-        first = LlmInsightDraft.model_validate_json(steps.raw_outputs[0]) if steps.raw_outputs else None
+        try:
+            first = LlmInsightDraft.model_validate_json(steps.raw_outputs[0]) if steps.raw_outputs else None
+        except ValueError:  # the first answer was cut off or not JSON (E09): the repair answered
+            first = None
+            print(json.dumps({"run": run, "first_answer": "E09 (unparsable)", "main_error": steps.main_error}))
+        if first is None and steps.repaired:
+            first = LlmInsightDraft.model_validate_json(steps.raw_outputs[-1])
         first_v = check_draft(resolve_aliases(first, aliases), by_id, ctx.cfg, request) if first else {}
         drafted = len(first.selected) if first else 0
         fallback = len(steps.narration.violations)

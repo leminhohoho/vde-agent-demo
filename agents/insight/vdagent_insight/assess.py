@@ -195,9 +195,7 @@ def _explained_units(insights: list[Insight], by_id: dict[str, InsightCandidate]
     return explained & {u.unit.unit_id for u in overdue}
 
 
-def _limitations(
-    insights: list[Insight], by_id: dict[str, InsightCandidate], rejected: list[RejectedCandidate], ctx: CandidateContext
-) -> list[Limitation]:
+def _limitations(insights: list[Insight], by_id: dict[str, InsightCandidate], ctx: CandidateContext) -> list[Limitation]:
     messages = ctx.cfg.language.limitation_messages
     affected: dict[str, list[str]] = defaultdict(list)
     for ins in insights:
@@ -207,9 +205,8 @@ def _limitations(
         for flag in dict.fromkeys(f for c in cands for f in c.dq_flags):
             if flag in messages:
                 affected[flag].append(ins.insight_id)
-    for r in rejected:
-        if r.reason_code in messages:
-            affected[r.reason_code].append(r.candidate_id)
+    # Rejected candidates stay in `rejected_candidates` only: a limitation must belong to an insight
+    # the artifact states (P5 polish; scope DQ issues are DATA_LIMITATION insights themselves).
     return [
         Limitation(code=code, message=messages[code], affected=list(dict.fromkeys(ids))) for code, ids in sorted(affected.items())
     ]
@@ -263,7 +260,7 @@ def assess(
         insights=insights,
         rejected_candidates=all_rejected,
         chart_hints=hints,
-        limitations=_limitations(insights, by_id, all_rejected, ctx),
+        limitations=_limitations(insights, by_id, ctx),
     )
 
     flags = {f for c in candidates for f in c.dq_flags}

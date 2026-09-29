@@ -18,6 +18,7 @@ from ..bridge import (
     InsightAgent,
     ParsedText,
     compact_summary,
+    load_bridge_config,
     parse_free_text,
     render_reply,
 )
@@ -323,3 +324,18 @@ async def test_without_key_insights_the_reply_lists_and_returns_up_to_five_items
 async def test_q1_the_reply_does_not_say_de_xuat_twice(tmp_path: Path) -> None:
     reply, _ = await ask(tmp_path, "Vì sao căn SAPPHIRE1-16.231 bán chậm?")
     assert "Đề xuất: Đề xuất" not in reply and "→ Đề xuất xem xét" in reply
+
+
+async def test_q4_the_reply_lists_only_limitations_of_what_it_shows(tmp_path: Path) -> None:
+    reply, _ = await ask(tmp_path, "DOM trung vị theo hướng ban công ở Sapphire 1?")
+    env = await runtime(tmp_path).store.get(block(reply)["artifact_id"])
+    assert env is not None
+    shown = [i for i in env.payload.insights if i.materiality == "KEY"] or env.payload.insights[:5]
+    scope_codes = set(load_bridge_config().scope_limitation_codes)
+    allowed = {m for i in shown for m in i.limitations}
+    allowed |= {
+        lim.message for lim in [*env.limitations, *env.payload.limitations] if lim.code in scope_codes or lim in env.limitations
+    }
+    line = next((ln for ln in reply.splitlines() if ln.startswith("Giới hạn dữ liệu: ")), "")
+    listed = [m for m in line.removeprefix("Giới hạn dữ liệu: ").rstrip(".").split("; ") if m]
+    assert set(listed) <= allowed, set(listed) - allowed

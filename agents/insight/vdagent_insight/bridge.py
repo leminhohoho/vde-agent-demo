@@ -74,6 +74,7 @@ class BridgeConfig(BaseModel):
     compat_role: Literal["SALES_OPS", "SALES_MANAGER", "EVALUATOR"]
     max_reply_chars: int = Field(gt=0, le=MAX_REPLY_CHARS)
     compact_max_chars: int = Field(gt=0)
+    scope_limitation_codes: list[str] = []
 
 
 def load_bridge_config(path: Path = CONFIG_DIR / "bridge.yaml") -> BridgeConfig:
@@ -196,6 +197,7 @@ def render_reply(
     compat: bool,
     max_chars: int = MAX_REPLY_CHARS,
     snapshot_date: str | None = None,
+    scope_codes: frozenset[str] = frozenset(),
 ) -> str:
     env = result.envelope
     if env is None:
@@ -222,7 +224,10 @@ def render_reply(
     ]
     if compat:
         head.append(COMPAT_NOTE)
-    limits = [lim.message for lim in [*env.limitations, *p.limitations]][:5]
+    # Only what the reader can see: artifact-level limitations, data-quality limitations of the whole
+    # scope, and the limitations of the insights shown (P5).
+    scope_wide = [lim.message for lim in [*env.limitations, *p.limitations] if lim in env.limitations or lim.code in scope_codes]
+    limits = list(dict.fromkeys([*scope_wide, *(m for i in shown for m in i.limitations)]))[:5]
 
     def build(k: int, text_max: int) -> str:
         items = shown[:k]
@@ -391,8 +396,9 @@ class InsightAgent:
         result = await run_task(request, self._rt.deps(memory))
         manifest = await self._rt.reader.manifest()
         return render_reply(
-            result, request, compat=compat, max_chars=self._cfg.max_reply_chars, snapshot_date=manifest.snapshot_date
-        )
+            result, request, compat=compat, max_chars=self._cfg.max_reply_chars, snapshot_date=manifest.snapshot_date,
+            scope_codes=frozenset(self._cfg.scope_limitation_codes),
+        )  # fmt: skip
 
     async def invoke(self, ctx: InvocationContext) -> None:
         try:

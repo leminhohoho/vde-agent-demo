@@ -455,3 +455,16 @@ async def test_the_model_id_is_kept_when_some_items_are_templated(tmp_path: Path
     env = result.envelope
     assert env is not None and env.payload.summary.narrative_mode == "TEMPLATE"
     assert env.producer.model_id == "gemini-3.5-flash-lite"
+
+
+async def test_q4_limitations_come_only_from_insights_never_from_rejected_candidates(tmp_path: Path) -> None:
+    """Live P5 Q4: limitations of candidates that were not selected (rejected T3 groups) showed up."""
+    data = orientation_dataset({"W": list(range(150, 200, 2)), "E": list(range(30, 60, 2)), "NE": [100, 110]})
+    request, reader = task(data, tasks=("T3", "T7"), intent="PERFORMANCE_METRIC_LOOKUP")
+    result, _ = await run(tmp_path, request, reader)
+    env = result.envelope
+    assert env is not None and ("C-T3-balcony_orientation-NE", "GROUP_TOO_SMALL") in [
+        (r.candidate_id, r.reason_code) for r in env.payload.rejected_candidates
+    ]
+    ids = {i.insight_id for i in env.payload.insights}
+    assert all(set(lim.affected) <= ids for lim in env.payload.limitations)

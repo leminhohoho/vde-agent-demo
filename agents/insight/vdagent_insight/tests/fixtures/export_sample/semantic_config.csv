@@ -1,0 +1,48 @@
+config_key,config_value,value_type,semantic_version,approval_status,description
+overdue_threshold_days,90,INTEGER,3.1.0,APPROVED,Ngưỡng DOM quá hạn (spec §5.6)
+peer_area_tolerance_pct,10,DECIMAL,3.1.0,APPROVED,Dung sai diện tích peer ±10% (spec §4.1)
+min_peer_count,5,INTEGER,3.1.0,APPROVED,Số peer tối thiểu (spec §4.1)
+floating_mortgage_rate_min_pct,10.5,DECIMAL,3.1.0,PENDING,Lãi suất thả nổi tối thiểu (D9)
+floating_mortgage_rate_max_pct,13.5,DECIMAL,3.1.0,PENDING,Lãi suất thả nổi tối đa (D9)
+severe_defect_penalty_min,25,INTEGER,3.1.0,PENDING,Điểm phạt lỗi nặng tối thiểu (spec §4.3)
+defect_trash_near_m,3.0,DECIMAL,3.1.0,PENDING,Cự ly phòng rác gần (spec §4.2)
+defect_trash_far_m,8.0,DECIMAL,3.1.0,PENDING,Cự ly phòng rác xa (spec §4.2)
+defect_efficiency_low,0.85,DECIMAL,3.1.0,PENDING,Hiệu suất sàn kém (spec §4.2)
+defect_efficiency_mid,0.90,DECIMAL,3.1.0,PENDING,Hiệu suất sàn trung bình (spec §4.2)
+thermal_penalty_min,40,INTEGER,3.1.0,PENDING,Điểm phạt nhiệt tối thiểu (spec §4.3)
+west_exposure_high_pct,30,DECIMAL,3.1.0,PENDING,Ngưỡng nắng Tây cao
+west_exposure_low_pct,15,DECIMAL,3.1.0,PENDING,Ngưỡng nắng Tây thấp
+obstruction_near_m,30,DECIMAL,3.1.0,PENDING,Khoảng cách che chắn gần
+secondary_gap_threshold_pct,10,DECIMAL,3.1.0,PENDING,Chênh giá sơ/thứ cấp (spec §4.3)
+secondary_comp_recency_days,90,INTEGER,3.1.0,PENDING,Độ mới comp thứ cấp (spec §4.3)
+lump_sum_ticket_ratio_threshold,15.0,DECIMAL,3.1.0,PENDING,Ngưỡng tổng giá/thu nhập (spec §4.3)
+peer_spread_threshold_pct,10,DECIMAL,3.1.0,PENDING,Ngưỡng lệch giá peer (spec §4.3)
+defect_neutral_max,24,INTEGER,3.1.0,PENDING,Trần điểm phạt coi như bình thường (spec §4.3)
+funnel_dropoff_threshold_pct,60,DECIMAL,3.1.0,PENDING,Ngưỡng rút cọc (spec §5.1)
+min_booking_n,5,INTEGER,3.1.0,PENDING,Số booking tối thiểu để đủ tin cậy
+boosted_commission_pct,3.0,DECIMAL,3.1.0,PENDING,Hoa hồng tăng cường (spec §4.3)
+low_commission_threshold_pct,1.5,DECIMAL,3.1.0,PENDING,Ngưỡng hoa hồng thấp kích hoạt LOW_SALES_INCENTIVE (spec §5.3)
+subsidy_support_min_mo,24,INTEGER,3.1.0,PENDING,Số tháng hỗ trợ tối thiểu để coi là đủ (spec §5.3)
+spiff_bonus_min_vnd,50000000,INTEGER,3.1.0,PENDING,Thưởng nóng tối thiểu
+spiff_bonus_max_vnd,100000000,INTEGER,3.1.0,PENDING,Thưởng nóng tối đa
+defect_share_pct,15,DECIMAL,3.1.0,PENDING,Tỷ lệ căn khuyết tật (spec §5.1)
+defect_not_discounted_pct,50,DECIMAL,3.1.0,PENDING,Tỷ lệ căn lỗi không chiết khấu (spec §5.1)
+high_view_threshold,300,INTEGER,3.1.0,PENDING,Lượt xem cao (spec §5.1)
+high_visit_threshold,10,INTEGER,3.1.0,PENDING,Lượt dẫn xem cao (spec §5.1)
+low_view_threshold,50,INTEGER,3.1.0,PENDING,Lượt xem thấp (spec §5.1)
+macro_rate_absorption_corr,-0.7,DECIMAL,3.1.0,PENDING,Tương quan lãi suất - hấp thụ (spec §5.1)
+net_area_min_m2,26,DECIMAL,3.1.0,APPROVED,Diện tích nhỏ nhất (VHOP thật)
+net_area_max_m2,137,DECIMAL,3.1.0,APPROVED,Diện tích lớn nhất (VHOP thật)
+efficiency_ratio_min,0.78,DECIMAL,3.1.0,PENDING,Hiệu suất sàn tối thiểu
+efficiency_ratio_max,0.90,DECIMAL,3.1.0,PENDING,Hiệu suất sàn tối đa
+floor_min,1,INTEGER,3.1.0,APPROVED,Tầng nhỏ nhất
+floor_max,31,INTEGER,3.1.0,APPROVED,Tầng lớn nhất (VHOP thật)
+floor_top_min,28,INTEGER,3.1.0,APPROVED,Ngưỡng tầng TOP
+recommended_defect_discount_pct,5,DECIMAL,3.1.0,PENDING,Chiết khấu bù lỗi đề xuất
+defect_compensation_discount_pct,5,DECIMAL,3.1.0,PENDING,Chiết khấu bù lỗi (spec §4.3)
+median_household_income_vnd,566000000,INTEGER,3.1.0,PENDING,Thu nhập hộ suy luận từ GRDP/người (D17)
+months_of_inventory_moi,2.5,DECIMAL,3.1.0,PENDING,Số tháng tồn kho suy luận (D17)
+enable_crawl,false,BOOLEAN,3.1.0,PENDING,Bật crawl thật (D4: tắt)
+attribution_weight_primary,0.60,DECIMAL,3.1.0,PENDING,Trọng số nguyên nhân chính
+attribution_weight_secondary,0.25,DECIMAL,3.1.0,PENDING,Trọng số nguyên nhân phụ 1
+attribution_weight_tertiary,0.15,DECIMAL,3.1.0,PENDING,Trọng số nguyên nhân phụ 2

@@ -206,6 +206,11 @@ semantic_config:
       coverage: "{value} số căn quá hạn có dữ liệu hợp lệ"
       units_valid: "{value} hợp lệ"
       units_in_scope: "{value} trong phạm vi"
+    # DOM only through a DOM slot (DOM_MISSING): a unit root cause must bind one, and a sentence that
+    # speaks of lingering / DOM must carry one ("tồn kho" = inventory, not DOM).
+    dom_slots: [dom, group_dom, rest_dom]
+    dom_words: ["tồn", "dom"]
+    dom_word_exceptions: ["tồn kho"]
     # Phrases that label a number: never right before or after a numeric {{slot}} (SLOT_LABEL_WRITTEN).
     label_phrases: ["số căn", "tổng số căn", "tỷ trọng", "tổng điểm"]
     mean_words: ["trung bình", "bình quân"]

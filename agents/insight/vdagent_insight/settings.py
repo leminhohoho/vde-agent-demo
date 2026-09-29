@@ -223,6 +223,9 @@ class LanguageConfig(_Config):
     slot_labels: dict[str, str] = {}
     """Fixed label per ratio/count slot, `{value}` = the formatted number (rendered by code)."""
     label_phrases: tuple[str, ...] = ()
+    dom_slots: tuple[str, ...] = ()
+    dom_words: tuple[str, ...] = ()
+    dom_word_exceptions: tuple[str, ...] = ()
     strong_comparison_phrases: tuple[str, ...]
     imperative_phrases: tuple[str, ...]
     recommendation_prefixes: tuple[str, ...]
@@ -240,6 +243,8 @@ class LanguageConfig(_Config):
         "quantity_word_exceptions",
         "mean_words",
         "label_phrases",
+        "dom_words",
+        "dom_word_exceptions",
         "strong_comparison_phrases",
         "imperative_phrases",
         "recommendation_prefixes",

@@ -255,3 +255,25 @@ def test_a_number_left_to_its_code_label_passes() -> None:
     c = t2_candidate()
     it = t2_item("{{cause_label}} chiếm {{weighted_share}} và xuất hiện ở {{unit_share}}.", c)
     assert validate_item(it, {c.candidate_id: c}, CFG, request()) == []
+
+
+# ---- DOM must come through a slot (P5 polish) -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "Căn {{unit}} có khả năng liên quan tới {{cause_label}}, đơn giá/m² so với trung vị peer {{spread}}.",
+        "Căn {{unit}} đã tồn DOM và có dấu hiệu liên quan đến {{cause_label}}.",  # live P5 Q3
+    ],
+)
+def test_q3_a_unit_root_cause_must_state_its_dom_through_the_slot(template: str) -> None:
+    assert "DOM_MISSING" in check(item(template))
+
+
+def test_dom_words_without_a_dom_slot_are_rejected_but_inventory_is_not_dom() -> None:
+    c = t2_candidate()
+    lingering = t2_item("{{cause_label}} xuất hiện ở các căn tồn lâu, chiếm {{weighted_share}}.", c)
+    assert "DOM_MISSING" in {v.code for v in validate_item(lingering, {c.candidate_id: c}, CFG, request())}
+    stock = t2_item("{{cause_label}} chiếm {{weighted_share}} theo dữ liệu tồn kho.", c)
+    assert validate_item(stock, {c.candidate_id: c}, CFG, request()) == []

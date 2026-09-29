@@ -12,6 +12,7 @@ config (`action_texts`), never from the model.
 | GR-02 | E12 | a `forbidden_phrases` phrase or a URL |
 | GR-03 | E11 | unknown candidate, a ref outside the item's candidates, a slot the candidate lacks, template slots ≠ slot refs |
 | GR-01 | SLOT_LABEL_WRITTEN | a `label_phrases` phrase, or the slot's own code label, right next to a numeric slot |
+| GR-03 | DOM_MISSING | a unit root cause without a DOM slot, or "tồn"/"DOM" in the sentence without one |
 | GR-04 | SCOPE_VIOLATION | a literal unit code (`language.unit_code_pattern`): codes only come through slots |
 | GR-06 | (config) | `action_texts` must be suggestions: checked when the config is loaded (settings.py) |
 | GR-07 | STRONG_CLAIM_NOT_SIGNIFICANT | a strong comparison on a candidate that is not `significant` |
@@ -153,6 +154,22 @@ def _slot_labels(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
     return out
 
 
+def _dom(item: DraftItem, given: list[InsightCandidate], cfg: SemanticConfig) -> list[Violation]:
+    """A unit root cause states its DOM, and "tồn"/"DOM" in a sentence needs a DOM slot."""
+    lang = cfg.language
+    if any(s.ref.partition(".")[2] in lang.dom_slots for s in item.slots):
+        return []
+    prose = normalize_phrase(SLOT.sub(" ", item.template))
+    for exception in lang.dom_word_exceptions:
+        prose = re.sub(rf"(?<!\w){re.escape(exception)}(?!\w)", " ", prose)
+    mentions = [w for w in lang.dom_words if _has_phrase(prose, w)]
+    unit_root = any(c.insight_type == "ROOT_CAUSE_SIGNAL" and c.level == "UNIT" for c in given)
+    if unit_root or mentions:
+        why = f"mentions {mentions}" if mentions else "a unit root cause"
+        return [Violation("GR-03", "DOM_MISSING", f"{why} without a DOM slot {list(lang.dom_slots)}: {item.template!r}")]
+    return []
+
+
 def _statistic(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
     """A median slot (`language.median_slots`) must not be called an average."""
     lang = cfg.language
@@ -180,6 +197,7 @@ def validate_item(
         + _comparisons(item, given, cfg)
         + _language(item, given, cfg)
         + _slot_labels(item, cfg)
+        + _dom(item, given, cfg)
         + _statistic(item, cfg)
         + _length(item, cfg)
     )

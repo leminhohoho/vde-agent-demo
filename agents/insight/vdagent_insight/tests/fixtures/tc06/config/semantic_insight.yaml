@@ -399,6 +399,15 @@ semantic_config:
       coverage: '{value} số căn quá hạn có dữ liệu hợp lệ'
       units_valid: '{value} hợp lệ'
       units_in_scope: '{value} trong phạm vi'
+    dom_slots:
+    - dom
+    - group_dom
+    - rest_dom
+    dom_words:
+    - tồn
+    - dom
+    dom_word_exceptions:
+    - tồn kho
     label_phrases:
     - số căn
     - tổng số căn

@@ -217,3 +217,10 @@ def test_an_outlying_dom_in_the_zone_is_flagged_but_kept() -> None:
     batch = t1_candidates(context(dataset(units, inv, diags, causes)))
     flagged = {c.subject.id: [f for f in c.dq_flags if f.startswith("OUTLIER")] for c in batch.candidates}
     assert flagged == {"U001": [], "U002": [], "U003": [], "U004": [], "U005": ["OUTLIER_EXCLUDED"]}
+
+
+def test_d74_the_bridge_evidence_artifact_goes_to_lineage_only() -> None:
+    data = single_unit(causes=[cause(11, "OVERPRICED_VS_PEER", evidence_artifact_id="ART-OVERPRICED_VS_PEER-U011")])
+    (c,) = t1_candidates(context(data)).candidates
+    assert "artifact:ART-OVERPRICED_VS_PEER-U011" in c.lineage.source_refs
+    assert not any("ART-OVERPRICED_VS_PEER-U011" in ref for ref in c.evidence_refs)

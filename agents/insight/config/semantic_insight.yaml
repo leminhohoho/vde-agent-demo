@@ -21,9 +21,9 @@ semantic_config:
     subsidy_min_months: {value: 24, status: APPROVED, source: "DW 4.3"}
     funnel_dropoff_trigger_pct: {value: "60", status: APPROVED, source: "DW 4.3"}
     low_commission_max_pct: {value: "1.5", status: APPROVED, source: "DW 4.3"}
-    # missing_rate of a secondary field, upper bounds in %: note ≤5, warn ≤10, describe-only ≤20,
-    # exclude above 40 (20–40 → DQ_DESCRIBE_ONLY).
-    missing_rate_tiers: {value: {note_max: "5", warn_max: "10", describe_only_min: "20", exclude_above: "40"}, status: PENDING, source: "spec 5.5"}
+    # missing_rate of a secondary field, upper bounds in % (inclusive): ≤5 fine, ≤10 DQ_NOTE, ≤20 DQ_WARN,
+    # ≤40 DQ_DESCRIBE_ONLY, above 40 FIELD_EXCLUDED.
+    missing_rate_tiers: {value: {none_max: "5", note_max: "10", warn_max: "20", describe_only_max: "40"}, status: PENDING, source: "spec 5.5"}
     # coverage lower bounds in %: ≥90 full, 70–90 partial, 50–70 low, <50 insufficient.
     coverage_tiers: {value: {full_min: "90", partial_min: "70", low_min: "50"}, status: PENDING, source: "spec 5.5"}
     min_group_size: {value: 5, status: PENDING, source: "spec 5.5"}

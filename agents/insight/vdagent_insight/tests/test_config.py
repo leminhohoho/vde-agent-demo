@@ -61,6 +61,10 @@ def test_shipped_semantic_config_has_the_spec_defaults() -> None:
     assert (p.min_group_size, p.min_effect_size_days) == (5, 15)
     assert (p.freshness_warn_hours, p.freshness_error_hours) == (24, 72)
     assert p.mnar_gap_pct == Decimal("10")
+    m = p.missing_rate_tiers
+    assert (m.none_max, m.note_max, m.warn_max, m.describe_only_max) == (5, 10, 20, 40)
+    c = p.coverage_tiers
+    assert (c.full_min, c.partial_min, c.low_min) == (90, 70, 50)
     assert p.max_key_insights == 5
     assert p.attribution_sum_tolerance == Decimal("0.001")
 

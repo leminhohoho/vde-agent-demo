@@ -121,13 +121,13 @@ class PeerTiers(_Config):
 
 
 class MissingRateTiers(_Config):
-    """Bounds (%) of a secondary field's missing rate: ≤note_max fine, ≤warn_max DQ_NOTE/DQ_WARN,
-    from describe_only_min describe-only, above exclude_above the field is dropped (spec 5.5)."""
+    """Inclusive upper bounds (%) of a secondary field's missing rate (spec 5.5): ≤none_max fine,
+    ≤note_max DQ_NOTE, ≤warn_max DQ_WARN, ≤describe_only_max DQ_DESCRIBE_ONLY, above → FIELD_EXCLUDED."""
 
+    none_max: Dec
     note_max: Dec
     warn_max: Dec
-    describe_only_min: Dec
-    exclude_above: Dec
+    describe_only_max: Dec
 
 
 class CoverageTiers(_Config):

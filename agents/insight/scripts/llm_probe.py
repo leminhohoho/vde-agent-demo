@@ -88,7 +88,7 @@ def probe_gemini(env: dict[str, str], model_id: str, secrets: list[str]) -> Deci
             print("[gemini] available models:", ", ".join(ids))
         return Decimal(0)
     latency = int((time.perf_counter() - start) * 1000)
-    u = resp.usage_metadata
+    u = resp.usage_metadata or types.GenerateContentResponseUsageMetadata()
     inp, cached = (u.prompt_token_count or 0), (u.cached_content_token_count or 0)
     out, thinking = (u.candidates_token_count or 0), (u.thoughts_token_count or 0)
     finish = resp.candidates[0].finish_reason if resp.candidates else None

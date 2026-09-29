@@ -22,3 +22,20 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vdagent_insight"]
+
+# `make insight-lint` (ruff through uvx; the repo had no linter). The legacy LangChain modules are
+# excluded until phase P4 replaces them; tools.py and mcp_client.py stay untouched by rule.
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+extend-exclude = [
+  "vdagent_insight/agent.py",
+  "vdagent_insight/bridge.py",
+  "vdagent_insight/tools.py",
+  "vdagent_insight/mcp_client.py",
+  "vdagent_insight/tests/test_agent.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # Vietnamese text and typographic characters are intended

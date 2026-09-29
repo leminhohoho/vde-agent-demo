@@ -5,7 +5,16 @@ from __future__ import annotations
 from decimal import Decimal
 from types import SimpleNamespace
 
-from ..llm.usage import compute_cost, from_gemini, from_openai, over_daily_budget, task_cost, usage_warnings
+from ..llm.usage import (
+    NoOpUsageSink,
+    UsageSink,
+    compute_cost,
+    from_gemini,
+    from_openai,
+    over_daily_budget,
+    task_cost,
+    usage_warnings,
+)
 from .builders import llm
 
 CFG = llm()
@@ -74,3 +83,10 @@ def test_task_cost_sums_the_priced_calls_and_the_daily_budget_only_warns() -> No
     b = from_gemini(gemini_meta(100, 0, 10, 0), "gemini-unknown", "REPAIR", 1, "STOP", CFG)
     assert task_cost([a, b]) == Decimal("0.00719") and task_cost([b]) is None and task_cost([]) is None
     assert over_daily_budget(Decimal("5.01"), CFG) and not over_daily_budget(Decimal("5.0"), CFG)
+
+
+async def test_usage_sink_interface_and_the_noop_sink() -> None:
+    sink: UsageSink = NoOpUsageSink()
+    u = from_gemini(gemini_meta(1, 0, 1, 0), "gemini-3.5-flash-lite", "MAIN", 1, "STOP", CFG)
+    await sink.record("7c9e6679-7425-40de-944b-e07fc1f90ae7", [u])
+    assert await sink.spent_today() == Decimal(0)

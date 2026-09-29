@@ -18,7 +18,7 @@ reasoning off (MAIN, MEMORY) → HIDDEN_THINKING. Warnings are logged, never fat
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
 
 from ..contracts import CallType, LlmUsage, Provider
 from ..settings import LlmConfig, ModelPrice
@@ -91,3 +91,22 @@ def task_cost(usages: list[LlmUsage]) -> Decimal | None:
 def over_daily_budget(spent_today: Decimal, cfg: LlmConfig) -> bool:
     """Only a WARNING (P3 brief): the caller logs it; nothing is blocked."""
     return spent_today > cfg.budget.daily_usd
+
+
+class UsageSink(Protocol):
+    """Where every `LlmUsage` of a task goes (spec 7.5: agent_task_logs). The SQLite store of the
+    Insight Agent implements it in phase P4; until then `NoOpUsageSink`."""
+
+    async def record(self, task_id: str, usages: list[LlmUsage]) -> None: ...
+
+    async def spent_today(self) -> Decimal:
+        """Sum of `cost_usd` of today's calls, for the daily budget warning."""
+        ...
+
+
+class NoOpUsageSink:
+    async def record(self, task_id: str, usages: list[LlmUsage]) -> None:
+        return None
+
+    async def spent_today(self) -> Decimal:
+        return Decimal(0)

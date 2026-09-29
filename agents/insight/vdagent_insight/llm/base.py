@@ -21,20 +21,29 @@ Reasoning = Literal["off", "low"]
 
 
 class LlmError(Exception):
-    def __init__(self, message: str, usage: LlmUsage | None = None) -> None:
+    def __init__(self, message: str, usage: LlmUsage | None = None, raw: str | None = None) -> None:
         super().__init__(message)
         self.usage = usage
+        self.raw = raw
+        """The model's text when there was one (sent back to the repair call)."""
 
 
 class LlmTransientError(LlmError):
-    """E08: timeout, 429, 5xx: retry once, then the fallback provider, then TEMPLATE."""
+    """E08: timeout, 429, 5xx, network: retry once, then the fallback provider, then TEMPLATE."""
 
 
 class LlmSchemaError(LlmError):
-    """E09: output not parseable into the schema (truncated by the token limit included)."""
+    """E09: 400, safety block, truncated by the token limit, or output not parseable into the schema:
+    repair once with the provider that answered, then TEMPLATE (D-35)."""
 
 
 class LlmClient(Protocol):
     async def generate_structured(
         self, *, system: str, user: str, schema: type[BaseModel], call_type: CallType, reasoning: Reasoning
     ) -> tuple[BaseModel, LlmUsage]: ...
+
+
+class TokenCounter(Protocol):
+    async def count_tokens(self, *, system: str, user: str) -> int:
+        """Input tokens of this prompt by the provider's own count (pre-flight, spec 6.4)."""
+        ...

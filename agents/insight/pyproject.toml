@@ -11,6 +11,8 @@ dependencies = [
   "mcp>=1.9",
   "pydantic>=2.7",
   "pyyaml>=6.0",
+  "google-genai>=1.0",
+  "openai>=1.60",
 ]
 
 [tool.uv.sources]

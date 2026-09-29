@@ -64,6 +64,17 @@ Chi tiết và số liệu: `docs/INSIGHT_P2_P5_DECISIONS.md` (mục "Quyết đ
 | Q16 | Data pack xác nhận NULL của `spiff_bonus_vnd` có nghĩa. | ĐÓNG |
 | TC | TC-01 → `SAPPHIRE1-16.231`; TC-04 → The Beverly. | ĐÃ CHỐT |
 
+## D-30: model, key, endpoint (probe 29/09, `agents/insight/scripts/llm_probe.py`)
+
+| Provider | Kết quả | Trạng thái |
+|---|---|---|
+| Gemini `gemini-3.5-flash-lite` (google-genai 2.25, `GEMINI_API_KEY`) | Trả lời được; `response_json_schema` hợp lệ; `thinking_level=MINIMAL` → 0 thinking token; finish STOP; ~1,3 s; 21 in / 23 out token | ĐÃ CHỐT |
+| OpenAI `gpt-6-luna` (openai 2.54, Responses API, `OPENAI_API_KEY`, endpoint mặc định api.openai.com) | Trả lời được; `json_schema` strict hợp lệ; `reasoning.effort=none` → 0 reasoning token; ~3,9 s | ĐÃ CHỐT |
+| `OPENAI_BASE_URL` | Để trống → dùng api.openai.com (không đi qua proxy) | ĐÃ CHỐT |
+| `LLM_MODEL` | Trống → agent LangChain cũ **không load** khi chạy backend cho tới P4 (không ảnh hưởng test) | Ghi nhận |
+
+Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egress trong docker-compose kiểm ở P5.
+
 ## Phase 2 (validation, render, TEMPLATE, assess): mặc định đã áp dụng
 
 Các mục D chưa được chốt riêng; coding agent làm theo **đề xuất mặc định** trong

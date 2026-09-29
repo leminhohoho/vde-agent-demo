@@ -7,7 +7,7 @@ rate (overdue units / unsold units):
 
 - BR-08: group < `min_group_size` → rejected GROUP_TOO_SMALL; |median gap| < `min_effect_size_days`
   → rejected EFFECT_TOO_SMALL.
-- Groups of 5–9 (`peer_tiers`) → SMALL_SAMPLE, describe only.
+- Groups of `describe_min`..`compare_min - 1` (3–4, D-71) → SMALL_SAMPLE, describe only.
 - `significant` = seeded-bootstrap intervals of the two medians do not overlap and the gap reaches
   the effect size (stats.py).
 

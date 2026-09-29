@@ -55,7 +55,8 @@ def test_shipped_semantic_config_has_the_spec_defaults() -> None:
     p = cfg.params
     assert p.overdue_threshold_days == 90
     assert p.peer_area_tolerance_pct == Decimal(10)  # percent, as in the DW
-    assert (p.peer_tiers.compare_min, p.peer_tiers.describe_min) == (10, 5)
+    assert (p.peer_tiers.compare_min, p.peer_tiers.describe_min) == (5, 3)  # D-71
+    assert p.min_group_size == 3
     assert p.min_peer_count == 5
     assert p.severe_defect_penalty_min == 25
     assert (p.thermal_penalty_min, p.subsidy_support_min_mo) == (40, 24)
@@ -63,7 +64,7 @@ def test_shipped_semantic_config_has_the_spec_defaults() -> None:
     assert p.low_commission_threshold_pct == Decimal("1.5")
     assert (p.peer_spread_threshold_pct, p.secondary_gap_threshold_pct) == (Decimal(10), Decimal(10))
     assert (p.lump_sum_ticket_ratio_threshold, p.defect_neutral_max) == (Decimal("15.0"), 24)
-    assert (p.min_group_size, p.min_effect_size_days) == (5, 15)
+    assert (p.min_group_size, p.min_effect_size_days) == (3, 15)
     assert (p.freshness_warn_hours, p.freshness_error_hours) == (24, 72)
     assert p.mnar_gap_pct == Decimal("10")
     m = p.missing_rate_tiers
@@ -81,7 +82,8 @@ def test_every_param_records_its_approval_status() -> None:
     assert set(cfg.param_status) == set(type(cfg.params).model_fields)
     assert cfg.param_status["overdue_threshold_days"] == "APPROVED"
     assert cfg.param_status["max_key_insights"] == "APPROVED"
-    for assumed in ("min_group_size", "max_units_in_context", "min_cause_share_pct", "conflict_tolerance_pct"):
+    assert cfg.param_status["peer_tiers"] == cfg.param_status["min_group_size"] == "APPROVED"  # D-71
+    for assumed in ("max_units_in_context", "min_cause_share_pct", "conflict_tolerance_pct"):
         assert cfg.param_status[assumed] == "PENDING"
 
 
@@ -209,6 +211,18 @@ def test_a_float_in_the_yaml_is_rejected(tmp_path: Path) -> None:
     ],
 )
 def test_invalid_semantic_config_names_the_problem(tmp_path: Path, change: Any, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_semantic_config(mutated(tmp_path, SEMANTIC, change))
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda d: d["semantic_config"]["params"]["peer_tiers"]["value"].update(compare_min=10), "compare_min"),
+        (lambda d: d["semantic_config"]["params"]["min_group_size"].update(value=5), "min_group_size"),
+    ],
+)
+def test_peer_tiers_stay_tied_to_the_dw_minimum_and_the_t3_group_size(tmp_path: Path, change: Any, message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         load_semantic_config(mutated(tmp_path, SEMANTIC, change))
 

@@ -12,10 +12,10 @@ semantic_config:
       source: DW semantic_config 3.1.0 (percent)
     peer_tiers:
       value:
-        compare_min: 10
-        describe_min: 5
-      status: PENDING
-      source: spec 5.5
+        compare_min: 5
+        describe_min: 3
+      status: APPROVED
+      source: D-71
     min_peer_count:
       value: 5
       status: APPROVED
@@ -72,9 +72,9 @@ semantic_config:
       status: PENDING
       source: spec 5.5
     min_group_size:
-      value: 5
-      status: PENDING
-      source: spec 5.5
+      value: 3
+      status: APPROVED
+      source: D-71 (= peer_tiers.describe_min)
     min_effect_size_days:
       value: 15
       status: PENDING

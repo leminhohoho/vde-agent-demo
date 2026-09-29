@@ -17,7 +17,10 @@ semantic_config:
   params:
     overdue_threshold_days: {value: 90, status: APPROVED, source: "PRD 5.6, DW 4.3"}
     peer_area_tolerance_pct: {value: "10", status: APPROVED, source: "DW semantic_config 3.1.0 (percent)"}
-    peer_tiers: {value: {compare_min: 10, describe_min: 5}, status: PENDING, source: "spec 5.5"}
+    # Peers / group size (D-71): >= 5 may compare, 3-4 describe only, < 3 hidden (a T3 group is dropped;
+    # T1/T2 keep the candidate flagged). compare_min must equal min_peer_count, and min_group_size must
+    # equal describe_min (the loader checks both).
+    peer_tiers: {value: {compare_min: 5, describe_min: 3}, status: APPROVED, source: "D-71"}
     min_peer_count: {value: 5, status: APPROVED, source: "DW semantic_config 3.1.0"}
     severe_defect_penalty_min: {value: 25, status: APPROVED, source: "DW semantic_config 3.1.0"}
     thermal_penalty_min: {value: 40, status: APPROVED, source: "DW semantic_config 3.1.0"}
@@ -34,7 +37,7 @@ semantic_config:
     missing_rate_tiers: {value: {none_max: "5", note_max: "10", warn_max: "20", describe_only_max: "40"}, status: PENDING, source: "spec 5.5"}
     # coverage lower bounds in %: ≥90 full, 70–90 partial, 50–70 low, <50 insufficient.
     coverage_tiers: {value: {full_min: "90", partial_min: "70", low_min: "50"}, status: PENDING, source: "spec 5.5"}
-    min_group_size: {value: 5, status: PENDING, source: "spec 5.5"}
+    min_group_size: {value: 3, status: APPROVED, source: "D-71 (= peer_tiers.describe_min)"}
     min_effect_size_days: {value: 15, status: PENDING, source: "spec 5.5"}
     outlier_iqr_warn: {value: "1.5", status: PENDING, source: "IAAO"}
     outlier_iqr_exclude: {value: "3.0", status: PENDING, source: "IAAO"}

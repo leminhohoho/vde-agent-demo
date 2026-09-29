@@ -192,3 +192,15 @@ async def test_tc23_excluded_field_and_missing_not_at_random() -> None:
     limitation = found["C-T7-DQ-fact_unit_inventory_snapshot.spiff_bonus_vnd"]
     assert limitation.dq_flags == ["FIELD_EXCLUDED", "MISSING_NOT_RANDOM"]
     assert (limitation.slots["missing_rate"].value, limitation.slots["mnar_gap"].value) == (Decimal(45), Decimal(25))
+
+
+def test_tc06_config_differs_from_the_shipped_one_only_in_version_and_threshold() -> None:
+    """Regenerate fixtures/tc06/config/semantic_insight.yaml when this fails after a config change."""
+    shipped = SemanticConfigRegistry(CONFIG_DIR).get("3.1.0")
+    tc06 = SemanticConfigRegistry(FIXTURES / "tc06" / "config").get("sem-tc06-60")
+    assert tc06.params.model_copy(update={"overdue_threshold_days": 90}) == shipped.params
+    assert (tc06.causes, tc06.insight_templates, tc06.pattern_dimensions) == (
+        shipped.causes,
+        shipped.insight_templates,
+        shipped.pattern_dimensions,
+    )

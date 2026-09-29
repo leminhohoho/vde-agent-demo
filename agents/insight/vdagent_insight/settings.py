@@ -294,6 +294,15 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         for spec in (*entry.required_evidence, *entry.supplementary_evidence):
             if spec.field not in EVIDENCE_TABLE_MODELS[spec.table].model_fields:
                 raise ConfigError(f"{path.name}: {entry.cause_code}: {spec.table} has no column {spec.field}")
+    tiers = params.peer_tiers
+    if tiers.compare_min != params.min_peer_count:
+        raise ConfigError(
+            f"{path.name}: peer_tiers.compare_min ({tiers.compare_min}) must equal min_peer_count ({params.min_peer_count})"
+        )
+    if params.min_group_size != tiers.describe_min:
+        raise ConfigError(
+            f"{path.name}: min_group_size ({params.min_group_size}) must equal peer_tiers.describe_min ({tiers.describe_min})"
+        )
     for dim in raw.pattern_dimensions:
         if dim.name not in PATTERN_TABLE_MODELS[dim.table].model_fields:
             raise ConfigError(f"{path.name}: pattern dimension: {dim.table} has no column {dim.name}")

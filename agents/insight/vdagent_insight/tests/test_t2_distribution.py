@@ -91,9 +91,12 @@ def test_low_coverage_is_describe_only() -> None:
     assert "LOW_COVERAGE" in c.dq_flags and c.significant is False
 
 
-def test_fewer_than_five_effective_units_are_suppressed() -> None:
-    batch = t2_candidates(context(zone_units(4, 4, {}), tasks=TASKS, analysis_scope=ZONE))
-    assert batch.candidates == [] and [r.reason_code for r in batch.rejected] == ["GROUP_TOO_SMALL"]
+def test_small_effective_samples_are_kept_but_describe_only() -> None:
+    """D-71: only T3 drops a too-small group; T2 keeps it flagged."""
+    (few,) = t2_candidates(context(zone_units(4, 4, {}), tasks=TASKS, analysis_scope=ZONE)).candidates
+    assert "SMALL_SAMPLE" in few.dq_flags and few.significant is False
+    (tiny,) = t2_candidates(context(zone_units(2, 2, {}), tasks=TASKS, analysis_scope=ZONE)).candidates
+    assert "GROUP_TOO_SMALL" in tiny.dq_flags
 
 
 def test_project_level_scope_gives_project_distributions() -> None:

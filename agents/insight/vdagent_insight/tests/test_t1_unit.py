@@ -130,9 +130,11 @@ def test_br07_peer_tiers_and_constrained_sample() -> None:
     (constrained,) = t1_candidates(context(single_unit(is_peer_sample_constrained=True))).candidates
     assert constrained.confidence == "MEDIUM" and "PEER_SAMPLE_CONSTRAINED" in constrained.dq_flags
     assert constrained.significant is False
-    (few,) = t1_candidates(context(single_unit(peer_count=7))).candidates
+    (enough,) = t1_candidates(context(single_unit(peer_count=5))).candidates
+    assert enough.significant is True and not {"SMALL_SAMPLE", "GROUP_TOO_SMALL"} & set(enough.dq_flags)
+    (few,) = t1_candidates(context(single_unit(peer_count=4))).candidates
     assert "SMALL_SAMPLE" in few.dq_flags and few.significant is False
-    (tiny,) = t1_candidates(context(single_unit(peer_count=3))).candidates
+    (tiny,) = t1_candidates(context(single_unit(peer_count=2))).candidates  # kept: only T3 drops (D-71)
     assert "GROUP_TOO_SMALL" in tiny.dq_flags and tiny.significant is False
 
 

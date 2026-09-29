@@ -23,7 +23,7 @@ Mọi mục dưới đây đang **chạy theo mặc định** trong code/config;
 | Ngưỡng `PENDING` trong `config/semantic_insight.yaml` | Giá trị mặc định đặt ở P0–P1 | DA |
 | D-20, D-21, D-24, D-25: danh mục câu chữ (limitation, TEMPLATE, `quantity_words` + ngoại lệ "tỷ lệ/tỷ trọng", từ mệnh lệnh, so sánh mạnh) | Bản nháp trong config | OPS (+ DA) |
 | D-22, D-23, D-26: slot nhãn, quét injection (câu hỏi, nhãn, và message đến ở bridge), luật tiếng Việt, `MEDIAN_AS_MEAN` | Như config và validator hiện tại | OPS |
-| D-27, D-28, D-31, D-32, D-33, P2-1, P2-2, P2-4 | Gộp candidate, luật KEY, `kind` của evidence, LLM_SKIPPED/SELECTION_LIMIT, khuyến nghị, `narrative_mode`, status, `Insight.limitations` là câu tiếng Việt | PO |
+| D-27, D-28, D-31, D-32, P2-1, P2-2, P2-4 | Gộp candidate, luật KEY, `kind` của evidence, LLM_SKIPPED/SELECTION_LIMIT, `narrative_mode`, status, `Insight.limitations` là câu tiếng Việt | PO |
 | D-53: lưu prompt hash + output thô trong `producer.replay` | Đang lưu (tối đa 20 KB mỗi output) | PO |
 | D-52: đồng hồ của task | `as_of` = lúc nhận task, lưu trong replay; demo ghim theo snapshot | PO |
 | D-10: Orchestrator gửi JSON `InsightTaskRequest` | Chế độ tương thích: câu tự do → request bằng luật cố định (`config/bridge.yaml`) | PLAT |
@@ -36,8 +36,7 @@ Mọi mục dưới đây đang **chạy theo mặc định** trong code/config;
 | D-01, D-02: dữ liệu thật và hợp đồng `dq`/`metric` với Data Agent | `ExportArtifactReader` tự dựng artifact từ data pack | DATA |
 | D-60, D-62: bộ chấm điểm và vận hành | Golden = mã nguyên nhân của bridge (1.139 căn khớp 100%) | OPS, DA |
 | P3-6, P3-7, P3-8 | `skipped` rỗng (hệ thống tự ghi LLM_SKIPPED); test live chỉ khi `INSIGHT_LIVE=1`; cảnh báo chi phí chỉ log WARNING | TL |
-| P5-2: `max_output_tokens = 2500` (spec 6.4) | Giữ theo spec. Câu hỏi cấp tòa chọn đủ 12 item đôi khi bị cắt (E09, 2/5 lần đo) → 1 lần repair, kết quả vẫn đúng nhưng chi phí gấp đôi. Đề xuất nâng lên 4.000 | TL + PO |
-| P5-3: câu chữ của LLM đúng số nhưng diễn giải chưa chuẩn (vd "tỷ trọng 13,3% trong tổng số căn chậm" cho `weighted_share`; "tồn DOM" không có số) | Chưa có luật chặn; đề xuất thêm nghĩa của từng slot vào prompt (bump prompt_version) | OPS + TL |
+| `action_texts` (câu khuyến nghị theo mã hành động) và `slot_labels` (nhãn của con số) | Bản nháp trong config | OPS |
 
 ## Phase 0
 
@@ -119,7 +118,11 @@ Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egr
 |---|---|---|
 | P5-1 | P4-10: nguyên nhân thật của E10 cấp tòa là **validator bắt nhầm** "tỷ lệ"/"tỷ trọng" (từ "tỷ" trong `quantity_words`), không phải prompt. Sửa: `quantity_word_exceptions` trong config + thông báo lỗi nêu đúng từ bị bắt. Prompt 1.3.0/1.4.0: chọn đủ mọi CAUSE_DISTRIBUTION rồi mới tới căn ví dụ; `limitation_text`/`recommendation_text` không có slot; không viết đơn vị sau slot số; `group_dom`/`rest_dom` là trung vị. Không cấp slot số liệu peer cho candidate có nhóm < 3 (PEER_HIDDEN). Đo (`scripts/tower_eval.py`, Sapphire 1): trước 4/22 item rơi về mẫu (18%); sau 0/46 (5 lần chạy, 1.4.0). | ĐÃ KIỂM |
 | P5-4 | Bridge: "dự án <tên>" → phạm vi PROJECT (`project_keywords`), kể cả khi trùng tên tòa (The Beverly); message đến được quét injection → INSIGHT_SECURITY_EVENT, kết quả không đổi; không có KEY → trả tối đa 5 ý và đưa vào JSON. | ĐÃ CHỐT (kỹ thuật) |
-| P5-5 | Validator: slot trong `limitation_text`/`recommendation_text` → E11 nêu rõ trường; gọi trung vị là "trung bình" → `MEDIAN_AS_MEAN` (`median_slots`, `mean_words` trong config). | ĐÃ CHỐT (kỹ thuật) |
+| P5-5 | Validator: slot trong `limitation_text` → E11 nêu rõ trường; gọi trung vị là "trung bình" → `MEDIAN_AS_MEAN` (`median_slots`, `mean_words` trong config). | ĐÃ CHỐT (kỹ thuật) |
+| P5-2 | `max_output_tokens = 4000`. | ĐÃ CHỐT (30/09) |
+| P5-6 | D-33: khuyến nghị lấy từ `action_texts` trong config theo `action_code`; LLM không viết khuyến nghị (bỏ `recommendation_text` khỏi `LlmInsightDraft`); bỏ lặp "Đề xuất: Đề xuất" khi hiển thị. | ĐÃ CHỐT (30/09) |
+| P5-7 | Slot tỷ lệ/đếm kèm nhãn cố định do code sinh (`slot_labels`); model tự đặt nhãn cạnh slot số → `SLOT_LABEL_WRITTEN`. ROOT_CAUSE_SIGNAL cấp căn bắt buộc `{{dom}}`, câu có "tồn"/"DOM" thiếu slot DOM → `DOM_MISSING`. "tòa"/"dự án" qua `{{scope_noun}}` → model tự viết là `SCOPE_NOUN_WRITTEN`. `{{scope_noun}}` theo cấp của đối tượng (bằng `analysis_scope.level` với insight cấp phạm vi; một insight cấp dự án trong câu hỏi cấp tòa vẫn là "dự án"). | ĐÃ CHỐT (30/09) |
+| P5-8 | Limitation chỉ từ insight có trong artifact; reply chỉ liệt kê limitation của insight được hiển thị + limitation DQ của phạm vi (`scope_limitation_codes` trong `config/bridge.yaml`). Prompt `insight-prompt-1.5.0`. | ĐÃ CHỐT (30/09) |
 
 ## Phase 4 (run_task, store, bridge, memory, bỏ LangChain; demo trên data pack)
 

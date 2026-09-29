@@ -528,7 +528,7 @@ const LlmInsightDraft = z.object({
       ref: z.string(),                           // "<candidate_id>.<slot>" (id không chứa dấu chấm)
     })),
     limitation_text: z.string().max(300).optional(),     // câu thường: không có {{slot}}
-    recommendation_text: z.string().max(300).optional(), // câu thường: không có {{slot}}
+    // v2.1: không có recommendation_text; khuyến nghị lấy từ config theo action_code (D-33)
   })).max(12),
   skipped: z.array(z.object({ candidate_id: z.string(), reason: z.string().max(100) })),
 });
@@ -590,7 +590,7 @@ Mọi tên model, tham số và giá nằm trong file config có version, không
 ```yaml
 insight_llm_config:
   version: "2026-09-30"
-  prompt_version: "insight-prompt-1.4.0"   # ghi cả trong prompts/*.md; đổi prompt → tăng (luật 12)
+  prompt_version: "insight-prompt-1.5.0"   # ghi cả trong prompts/*.md; đổi prompt → tăng (luật 12)
   primary:
     provider: gemini
     model_id: gemini-3.5-flash-lite
@@ -992,7 +992,13 @@ Nguồn: `docs/OPEN_QUESTIONS.md` và `docs/INSIGHT_P2_P5_DECISIONS.md`. Chỉ g
 | D-78 | Phạm vi ZONE/PROJECT: candidate cùng cấp phạm vi (T2, T3) đứng trước căn lẻ. | 6.4, 5.2 |
 | P4-5 | Demo: `as_of` ghim theo snapshot (`INSIGHT_AS_OF`); câu trả lời ghi "dữ liệu tính đến <ngày snapshot>". | 5.5, 9.4 |
 | P4-8 | `narrative_mode = TEMPLATE` nếu có item rơi về mẫu; `producer.model_id` vẫn ghi model khi có item do LLM viết. | 4.2 |
-| P4-9, P5 | claim\_binder bỏ đơn vị lặp sau slot số; GR-01 không coi "tỷ lệ/tỷ trọng" là số (`quantity_word_exceptions`); slot trong `limitation_text`/`recommendation_text` → E11; gọi trung vị là "trung bình" → `MEDIAN_AS_MEAN`. | 5.3 |
+| P4-9, P5 | claim\_binder bỏ đơn vị lặp sau slot số; GR-01 không coi "tỷ lệ/tỷ trọng" là số (`quantity_word_exceptions`); slot trong `limitation_text` → E11; gọi trung vị là "trung bình" → `MEDIAN_AS_MEAN`. | 5.3 |
 | P5 | Bridge quét prompt injection ngay trên message đến → INSIGHT\_SECURITY\_EVENT, kết quả không đổi. | 5.3 (GR-05), 10.2 |
-| P5 | `prompt_version = insight-prompt-1.4.0`. | 6.3, 7.5 |
+| D-33 (P5) | Khuyến nghị **tất định**: `recommendation.text` = câu trong `action_texts` của config theo `action_code` (bản nháp chờ OPS; loader kiểm GR-06: bắt đầu "Đề xuất"/"Có thể cân nhắc", không mệnh lệnh). LLM không viết khuyến nghị (`LlmInsightDraft` không còn `recommendation_text`). | 4.2, 5.3 (GR-06), 6.5 |
+| P5 | Slot tỷ lệ/đếm hiển thị kèm nhãn cố định do code sinh (`language.slot_labels`, vd `unit_share` → "X% số căn quá hạn", `weighted_share` → "X% tổng điểm quy nguyên nhân", `overdue_units` → "N căn quá hạn"); model không tự đặt nhãn cạnh slot số → `SLOT_LABEL_WRITTEN`. | 5.3 (GR-01), 8 |
+| P5 | ROOT\\_CAUSE\\_SIGNAL cấp căn bắt buộc bind `{{dom}}`; câu có "tồn"/"DOM" mà không có slot DOM → `DOM_MISSING`. | 5.3 (GR-03) |
+| P5 | Loại phạm vi ("tòa", "dự án"…) do code điền qua `{{scope_noun}}` theo cấp của đối tượng (bằng `analysis_scope.level` với insight cấp phạm vi); model tự viết → `SCOPE_NOUN_WRITTEN`. | 5.3 (GR-04), 8 |
+| P5 | Limitation chỉ gắn với insight có trong artifact (không lấy từ candidate bị loại); câu trả lời chỉ liệt kê limitation của các insight được hiển thị và limitation chất lượng dữ liệu của phạm vi. | 4.2 |
+| P5-2 | `max_output_tokens = 4000`. | 6.4, 7.5 |
+| P5 | `prompt_version = insight-prompt-1.5.0`. | 6.3, 7.5 |
 

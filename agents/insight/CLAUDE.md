@@ -49,6 +49,7 @@ scripts/ask.py  demo terminal qua bridge   scripts/tower_eval.py  đo tỷ lệ 
 ## Giả định đang dùng (bảng "Cần chốt sau prototype" đầu OPEN_QUESTIONS; spec v2.1 ghi phần đã chốt)
 - Orchestrator gửi câu hỏi tự do → chế độ tương thích (P4-1) tới khi chốt D-10; JSON request vẫn được nhận.
 - Nguồn artifact: data pack `export/` qua `ExportArtifactReader` (D-77); `as_of` ghim theo snapshot, câu trả lời ghi "dữ liệu tính đến …" (P4-5).
-- Prompt hiện tại `insight-prompt-1.4.0`; đổi câu chữ validator (config `language.*`) cũng phải chạy lại TC-01→33 và `scripts/tower_eval.py`.
+- Prompt hiện tại `insight-prompt-1.5.0`; đổi câu chữ validator (config `language.*`) cũng phải chạy lại TC-01→33 và `scripts/tower_eval.py`.
+- LLM chỉ viết `template` (+ `limitation_text`): khuyến nghị (`action_texts`), nhãn của số (`slot_labels`) và loại phạm vi (`{{scope_noun}}`) đều do code sinh.
 - Mart của data pack có `is_peer_sample_constrained`, `peer_count` (D-03; không có trong DW v3.1.0).
 - `insight_templates` và `recommendation_text` là bản nháp, cần Sales Ops duyệt.

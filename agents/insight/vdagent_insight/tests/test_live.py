@@ -8,7 +8,9 @@ sentences) to the file named by INSIGHT_LIVE_LOG, when set. Budget: a few thousa
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import logging
 import os
 import re
 from datetime import datetime
@@ -82,6 +84,49 @@ async def test_live_pipeline_to_step_9(case: str) -> None:
         "cost_usd": str(cost),
         "latency_ms": sum(u.latency_ms for u in steps.usages),
         "sentences": [i.claim.rendered_text for i in result.payload.insights[:3]],
+    }
+    print(json.dumps(summary, ensure_ascii=False))
+    log = os.environ.get("INSIGHT_LIVE_LOG")
+    if log:
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(summary, ensure_ascii=False) + "\n")
+
+
+async def test_live_bridge_end_to_end_on_the_data_pack(tmp_path: Path) -> None:
+    """P4: the Orchestrator's free text through the bridge, the data pack, the real LLM and the store."""
+    from ..bridge import MAX_REPLY_CHARS, InsightAgent
+    from ..runtime import build_runtime
+    from .conftest import DATAPACK_DIR
+    from .test_bridge import JSON_BLOCK, FakeCtx
+
+    source = "export" if (DATAPACK_DIR / "snapshot_manifest.csv").is_file() else "fixtures"
+    env = {
+        **live_env(),
+        "INSIGHT_ARTIFACT_SOURCE": source,
+        "INSIGHT_EXPORT_DIR": str(DATAPACK_DIR),
+        "INSIGHT_STORE_PATH": str(tmp_path / "insight.db"),
+        "INSIGHT_FORCE_PROVIDER": os.environ.get("INSIGHT_FORCE_PROVIDER", ""),
+    }
+    events: list[dict[str, object]] = []
+    rt = dataclasses.replace(build_runtime(env, logging.getLogger("live")), events=lambda e, f: events.append({"event": e, **f}))
+    ctx = FakeCtx("Vì sao tòa Sapphire 1 có nhiều căn bán chậm?", invocation_id="inv_live")
+    await InsightAgent(rt).invoke(ctx)  # type: ignore[arg-type]
+    (reply,) = ctx.emitted
+    (raw,) = JSON_BLOCK.findall(reply)
+    data = json.loads(raw)
+    done = next(e for e in events if e["event"] == "INSIGHT_TASK_COMPLETED")
+    assert len(reply) <= MAX_REPLY_CHARS and data["status"] in ("VALID", "PARTIAL") and data["insights"]
+    assert VI_DIACRITIC.search(reply) and "{{" not in reply
+    cost = Decimal(str(done["task_cost_usd"] or "0"))
+    assert cost < MAX_COST_PER_CASE
+    totals = ("status", "narrative_mode", "llm_calls", "task_cost_usd", "duration_ms", "candidates_sent", "insights_out")
+    calls = ("provider", "call_type", "input_tokens", "output_tokens", "thinking_tokens", "latency_ms")
+    summary = {
+        "case": "bridge-sapphire1",
+        "source": source,
+        **{k: done.get(k) for k in totals},
+        "llm": [{k: e.get(k) for k in calls} for e in events if e["event"] == "INSIGHT_LLM_CALLED"],
+        "reply": reply,
     }
     print(json.dumps(summary, ensure_ascii=False))
     log = os.environ.get("INSIGHT_LIVE_LOG")

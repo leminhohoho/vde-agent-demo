@@ -54,9 +54,10 @@ async def steps(
 
 async def test_a_clean_answer_needs_one_call_and_no_repair() -> None:
     ctx, cands = setting()
-    primary = FakeLlmClient([FakeReply(draft(cands[0].candidate_id), usage())])
+    primary = FakeLlmClient([FakeReply(draft("c1"), usage())])
     result = await steps(ctx, cands, primary)
     assert (result.repaired, result.main_error, result.narration.narrative_mode) == (False, None, "LLM")
+    assert result.narration.items[0].candidate_ids == (cands[0].candidate_id,)  # alias mapped back
     assert [c.call_type for c in primary.calls] == ["MAIN"] and primary.calls[0].reasoning == "off"
     assert "<data>" in primary.calls[0].user and primary.calls[0].system.startswith("<!-- prompt_version")
     assert [u.call_type for u in result.usages] == ["MAIN"]
@@ -65,7 +66,7 @@ async def test_a_clean_answer_needs_one_call_and_no_repair() -> None:
 
 async def test_a_violation_is_repaired_once_with_the_coded_errors() -> None:
     ctx, cands = setting()
-    cid = cands[0].candidate_id
+    cid = "c1"
     bad = draft(cid, "Căn {{unit}} cao hơn peer 20%, liên quan tới {{cause_label}}.")
     primary = FakeLlmClient([FakeReply(bad, usage()), FakeReply(draft(cid), usage("REPAIR"))])
     result = await steps(ctx, cands, primary)
@@ -100,7 +101,7 @@ async def test_tc18_all_providers_down_means_template_without_repair() -> None:
 
 async def test_the_repair_goes_to_the_provider_that_answered() -> None:
     ctx, cands = setting()
-    cid = cands[0].candidate_id
+    cid = "c1"
     primary = FakeLlmClient([LlmTransientError("x"), LlmTransientError("x")])
     bad = draft(cid, "Căn {{unit}} chắc chắn do {{cause_label}}.")
     fallback = FakeLlmClient([FakeReply(bad, usage()), FakeReply(draft(cid), usage("REPAIR"))])
@@ -111,7 +112,7 @@ async def test_the_repair_goes_to_the_provider_that_answered() -> None:
 
 async def test_hidden_thinking_is_logged_as_a_warning(caplog: pytest.LogCaptureFixture) -> None:
     ctx, cands = setting()
-    primary = FakeLlmClient([FakeReply(draft(cands[0].candidate_id), usage(thinking=800))])
+    primary = FakeLlmClient([FakeReply(draft("c1"), usage(thinking=800))])
     with caplog.at_level(logging.WARNING):
         result = await steps(ctx, cands, primary)
     assert result.warnings == ["HIDDEN_THINKING"]
@@ -120,7 +121,7 @@ async def test_hidden_thinking_is_logged_as_a_warning(caplog: pytest.LogCaptureF
 
 async def test_raw_outputs_are_kept_for_replay() -> None:
     ctx, cands = setting()
-    d = draft(cands[0].candidate_id)
+    d = draft("c1")
     result = await steps(ctx, cands, FakeLlmClient([FakeReply(d, usage())]))
     assert [json.loads(r) for r in result.raw_outputs] == [
         d | {"selected": [d["selected"][0] | {"limitation_text": None, "recommendation_text": None}]}

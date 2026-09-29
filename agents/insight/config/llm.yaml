@@ -6,7 +6,7 @@
 
 insight_llm_config:
   version: "2026-09-28"
-  prompt_version: "insight-prompt-1.0.0"  # prompts/v2/*.md carry the same value
+  prompt_version: "insight-prompt-1.1.0"  # prompts/v2/*.md carry the same value
   primary:
     provider: gemini
     model_id: gemini-3.5-flash-lite

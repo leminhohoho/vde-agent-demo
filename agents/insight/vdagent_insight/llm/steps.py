@@ -28,7 +28,7 @@ from ..validation import Violation
 from .base import LlmClient, TokenCounter
 from .calls import call_with_fallback
 from .preflight import preflight
-from .prompt import repair_prompt, system_prompt, user_prompt
+from .prompt import candidate_aliases, repair_prompt, resolve_aliases, system_prompt, user_prompt
 from .usage import usage_warnings
 
 log = logging.getLogger("vdagent.plugin.vdagent_insight")
@@ -85,6 +85,7 @@ async def run_llm_steps(
         counter=providers.counter,
     )
     by_id = {c.candidate_id: c for c in pf.kept}
+    aliases = candidate_aliases(pf.kept)
     retries, backoff_s = limits.transient_retries, limits.transient_backoff_ms / 1000
     main = await call_with_fallback(
         providers.primary, providers.fallback, system=system, user=render_user(pf.kept),
@@ -94,9 +95,10 @@ async def run_llm_steps(
         narration=Narration(), kept=pf.kept, rejected=pf.rejected, usages=list(main.usages),
         main_error=main.error, events=list(main.events), input_tokens=pf.input_tokens,
     )  # fmt: skip
-    draft = _draft(main.output)
-    if draft is not None:
-        result.raw_outputs.append(draft.model_dump_json())
+    answered = _draft(main.output)  # as the model wrote it, with aliases
+    draft = resolve_aliases(answered, aliases) if answered else None
+    if answered is not None:
+        result.raw_outputs.append(answered.model_dump_json())
     elif main.raw is not None:
         result.raw_outputs.append(main.raw)
 
@@ -104,7 +106,7 @@ async def run_llm_steps(
     needs_repair = main.client is not None and (main.error == "E09" or bool(violations))
     if needs_repair and llm.repair.max_attempts >= 1:
         assert main.client is not None
-        previous = draft.model_dump_json() if draft else (main.raw or "")
+        previous = answered.model_dump_json() if answered else (main.raw or "")
         if not violations:
             violations = {0: [Violation("SCHEMA", "E09", "the answer did not match the schema or was cut off")]}
         rsys, ruser = repair_prompt(cfg, llm, previous, violations, pf.kept)
@@ -116,7 +118,7 @@ async def run_llm_steps(
         result.events += [f"REPAIR_{e}" for e in repair.events] or ["REPAIR"]
         repaired = _draft(repair.output)
         if repaired is not None:
-            draft, result.repaired = repaired, True
+            draft, result.repaired = resolve_aliases(repaired, aliases), True
             result.raw_outputs.append(repaired.model_dump_json())
         elif repair.raw is not None:
             result.raw_outputs.append(repair.raw)

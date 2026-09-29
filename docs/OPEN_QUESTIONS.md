@@ -83,12 +83,12 @@ Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egr
 | P3-2 | Phân loại lỗi (D-35): timeout, 429, 5xx, lỗi mạng → E08 (retry 1 lần sau 1 s → OpenAI → TEMPLATE); 400, safety, hết token, JSON sai schema → E09 → 1 lần repair tới **provider vừa trả lời** (reasoning low) → TEMPLATE theo item. | CHỐT |
 | P3-3 | TC-18 thực hiện theo D-35: Gemini lỗi 2 lần (1 + 1 retry), OpenAI 503 → TEMPLATE (spec ghi "3 lần"). | Chờ cập nhật spec |
 | P3-4 | Prompt v2 ở `prompts/v2/` (bản LangChain cũ còn đọc `prompts/system.md` tới P4). `prompt_version` ghi trong file prompt phải khớp `config/llm.yaml` (có test). Hiện `insight-prompt-1.2.0`. | TẠM (P4 chuyển về `prompts/`) |
-| P3-5 | Trong prompt, candidate mang mã ngắn `c1`, `c2`… kèm danh sách `refs` hợp lệ; câu trả lời được đổi về id thật trước khi validate. Lý do (live 29/09): id dài làm Gemini vượt `max_output_tokens`; model đoán sai ref (`.cause` thay cho `.cause_label`) và ghi tên slot có ngoặc `{{…}}` (được chuẩn hóa). | CHỐT (kỹ thuật) |
+| P3-5 | (Chuẩn hóa ngoặc được chấp nhận, **đếm và log** `INSIGHT_SLOT_NAME_NORMALISED`.) Trong prompt, candidate mang mã ngắn `c1`, `c2`… kèm danh sách `refs` hợp lệ; câu trả lời được đổi về id thật trước khi validate. Lý do (live 29/09): id dài làm Gemini vượt `max_output_tokens`; model đoán sai ref (`.cause` thay cho `.cause_label`) và ghi tên slot có ngoặc `{{…}}` (được chuẩn hóa). | CHỐT (kỹ thuật) |
 | P3-6 | Model được yêu cầu để `skipped` rỗng; hệ thống tự ghi LLM_SKIPPED (giảm output token). | TẠM |
 | P3-7 | Test live chỉ chạy khi `INSIGHT_LIVE=1` **và** có key (tránh tốn tiền/không ổn định trong test thường, commit gate và CI). | TẠM |
 | P3-8 | `LlmUsage` đi qua interface `UsageSink`; store SQLite làm ở P4. Cảnh báo PRICING_MISSING / HIDDEN_THINKING / vượt ngân sách ngày chỉ log WARNING. | TẠM |
-| P3-9 | Cache hit = 0 trong mọi lần chạy live: phần tĩnh (~2.200 token) có thể dưới ngưỡng implicit cache của Gemini, hoặc cần gọi dày hơn. Theo dõi ở P5; có thể dùng explicit cache (`cached_content`). | MỞ |
-| P3-10 | Chưa lần chạy live nào phải dùng OpenAI fallback (Gemini ổn định); nhánh fallback mới được kiểm bằng mock + probe D-30. | Ghi nhận |
+| P3-9 | Cache hit = 0 trong các lần chạy live. **Quyết định: không dùng explicit cache.** | ĐÃ CHỐT |
+| P3-10 | Live ép OpenAI (`INSIGHT_FORCE_PROVIDER=openai`, TC-01, 29/09): MAIN + 1 REPAIR (145 reasoning token ở `low`), 2/2 item LLM, VALID, 0,00086 USD, 8,1 s. | ĐÃ KIỂM |
 
 ## Phase 2 (validation, render, TEMPLATE, assess): mặc định đã áp dụng
 

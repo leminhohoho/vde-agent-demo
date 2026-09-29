@@ -22,6 +22,48 @@
 | Q9 | `docs/PRD_VDAgent.md` không có trong repo. | Không dùng. | MỞ |
 | Q10 | `LlmInsightDraft.selected[].slot_map`: dạng dict hay list? | Dùng `slots: list[SlotRef]` (`slot`, `ref = "<candidate_id>.<slot>"`); Pydantic kiểm `ref` có đúng một dấu chấm, hai vế không rỗng, và `slot` không trùng trong một item. Khớp `{{slot}}` trong template ↔ `slots` thuộc GR-01/GR-03 (P2, validator theo item). Lý do: strict JSON schema của structured output OpenAI không chấp nhận object có `additionalProperties` động; Gemini responseSchema cũng xử lý kém kiểu map. Đổi ngay ở Phase 0 vì chưa có code nào phụ thuộc contract này. Ảnh hưởng: spec 6.5 (`LlmInsightDraft`) cần cập nhật; claim_binder ở P2 đọc `slots`. | CHỐT (spec: cần cập nhật) |
 
+## Phase 1 (gate + candidates)
+
+Trạng thái **TẠM** = đã code theo cách này, chờ nhóm xác nhận; đổi thì chỉ sửa config hoặc một hàm.
+
+| # | Vấn đề | Cách đang làm | Trạng thái |
+|---|---|---|---|
+| Q11 | Freshness: 5.5 ghi ">24h cảnh báo, >72h gắn mọi insight", BR-12 lại dùng `freshness_max_days`. | `freshness_warn_hours`/`freshness_error_hours`: tuổi dữ liệu > 24h → STALE_SNAPSHOT, hạ 1 bậc; > 72h → STALE_SNAPSHOT và LOW (5.2 "snapshot cũ"). Tuổi = `as_of` của task − `dq.data_as_of`. Không áp cho số liệu vĩ mô (T5). | TẠM |
+| Q12 | (Thay bằng D-71.) BR-07 nói peer < 5 thì "ẩn", nhưng TC-08 (3 peer) vẫn mong có insight OVERPRICED_VS_PEER. | Giữ candidate, gắn GROUP_TOO_SMALL (5–9: SMALL_SAMPLE), `significant = false`; `is_peer_sample_constrained` → trần MEDIUM + PEER_SAMPLE_CONSTRAINED. "Ẩn" hiểu là không được viết câu so sánh mạnh về peer. | ĐÓNG (D-71) |
+| Q13 | `significant` cho tỷ lệ: spec chỉ có ngưỡng hiệu ứng theo ngày (`min_effect_size_days`). | Tỷ lệ: chỉ xét hai khoảng Wilson không chồng nhau. Trung vị DOM: bootstrap không chồng nhau **và** chênh ≥ 15 ngày. Hai khoảng chạm nhau tính là chồng nhau. | MỞ |
+| Q14 | T3: spec ghi nguồn là "Metric Artifact theo dimension", nhưng cờ `significant` cần DOM từng căn và nhóm "phần còn lại"; mục 1.3 lại cấm Insight tự tính metric. | Tính trung vị DOM và tỷ lệ quá hạn theo nhóm từ các dòng dataset. Tập so sánh = căn chưa bán (AVAILABLE) trong scope, bỏ outlier > 3×IQR; tỷ lệ quá hạn = căn quá hạn / căn chưa bán. `metric_ref` trỏ vào artifact `insight_candidates` của task. | MỞ |
+| Q15 | action_code: BR-10 (mapping trong config) hay 7.6/Phụ lục #5 ("ưu tiên `recommended_action` trong mart")? | `action_code` luôn lấy từ mapping trong config. Mart lệch mapping của `primary_cause_code` → CONFLICT `ACTION_CODE_MISMATCH` (T7). | ĐÓNG (data pack: khớp 100%) |
+| Q16 | LOW_SALES_INCENTIVE: DW kích hoạt khi `spiff_bonus_vnd = 0 HOẶC NULL`, nên NULL có nghĩa, không phải thiếu dữ liệu. | Bằng chứng bắt buộc chỉ gồm `base_commission_pct`; `spiff_bonus_vnd` là bằng chứng bổ sung (có thì bind). | ĐÓNG (data pack xác nhận) |
+| Q17 | 5.2: HIGH cần "≥ 2 evidence từ nguồn độc lập". | "Nguồn" = bảng DW có số được bind vào claim. `{{dom}}` luôn lấy từ `fact_unit_inventory_snapshot`, nên cause có số từ mart đủ 2 nguồn; LOW_SALES_INCENTIVE chỉ có số từ bảng tồn kho → trần MEDIUM. | TẠM |
+| Q18 | Priority của T7 không được định nghĩa; mọi T2/T3 bằng nhau (0,5). | `priority_without_rank` trong config: T7 = 0 (luôn được giữ); hòa điểm thì xếp theo `candidate_id`. | TẠM |
+| Q19 | BR-06: LEGAL_PERMIT_BARRIER ở cấp dự án, nhưng bridge ghi theo từng căn. | Một candidate PROJECT/dự án nếu có căn quá hạn mang mã này trong bridge (slot = số căn); không sinh candidate cấp căn. Dự án đủ cả hai cờ pháp lý mà vẫn có mã LEGAL → CONFLICT `LEGAL_FLAGS_MISMATCH`. | TẠM |
+| Q20 | Coverage và n_eff chưa định nghĩa "hợp lệ"; outlier "theo peer group" nhưng dataset không có danh sách peer. | Căn hợp lệ = quá hạn, có dòng mart, tổng `attribution_score` = 1 ± 0,001. n_eff = số căn hợp lệ bỏ outlier DOM > 3×IQR trong cùng zone/project; nếu phải loại > 10% thì không loại căn nào. Với T1, outlier chỉ gắn cờ trong phạm vi zone. | TẠM |
+| Q21 | Biên của bảng 5.5 ("5–10%", "70–90%") chưa rõ gồm hay không gồm hai đầu. | Missing rate, freshness, rào IQR: bằng đúng ngưỡng thì ở bậc nhẹ hơn (≤). Coverage, cỡ mẫu: bằng đúng ngưỡng thì đạt bậc đó (≥). MNAR: phải > 10 điểm %. Có test cho từng biên và ±1 đơn vị. | TẠM |
+| Q22 | Payload `market_context` chưa có trong spec Data Agent; "cùng kỳ trước" chưa rõ. | Các dòng `fact_market_macro_monthly` (cột theo DW 3.1.0); so tháng mới nhất với cùng tháng năm trước; MOI hiển thị "tháng". `TODO(data-agent-contract)`. | TẠM |
+| Q23 | Bảng "bằng chứng tối thiểu" (6.2) và danh sách dimension của T3 là danh mục, nhưng spec không nói đặt ở đâu. | Đưa vào `semantic_insight.yaml` (`required_evidence`, `supplementary_evidence`, `uses_peer_group`, `pattern_dimensions`); loader kiểm tra cột có thật trong bảng. | TẠM |
+| Q24 | "Hai nguồn lệch quá `conflict_tolerance_pct`" (T7): so với giá trị nào? | Lệch tương đối so với giá trị trong dataset: DOM trong mart vs bảng tồn kho, giá trị metric artifact vs cột cùng tên trong dataset → CONFLICT `SOURCE_MISMATCH`. Ngưỡng 1% (PENDING). | TẠM |
+| Q25 | `NumericBinding.display` bắt buộc ngay từ candidate, nhưng "formatter" thuộc bước 8. | Module thuần `formatting.py` (vi-VN, dấu phẩy thập phân, làm tròn half-up **chỉ ở display**), dùng chung cho candidate engine và claim_binder ở P2. | TẠM |
+
+## Chốt sau khi profile data pack (29/09)
+
+Chi tiết và số liệu: `docs/INSIGHT_P2_P5_DECISIONS.md` (mục "Quyết định đã chốt" và 0b).
+
+| # | Quyết định | Trạng thái |
+|---|---|---|
+| D-00 | Repo là prototype để demo; P4 gọn (SQLite, không queue), chạy end-to-end trên data pack. | ĐÃ CHỐT |
+| D-70 | `semantic_config_version = 3.1.0`; tên key + đơn vị theo DW (`peer_area_tolerance_pct = 10` nghĩa là 10%); các ngưỡng công thức DW vào config, APPROVED (nguồn DW). | ĐÃ CHỐT |
+| D-71 | Peer ≥ 5 so sánh, 3–4 chỉ mô tả, < 3 ẩn; loại hẳn candidate chỉ ở T3 (T1/T2 giữ, gắn cờ, không so sánh); `constrained` → ≤ MEDIUM. **Thay thế Q12.** | ĐÃ CHỐT |
+| D-72 | T5: xu hướng trong 12 tháng có sẵn (lãi suất, hấp thụ), không YoY; MOI/PIR/thu nhập chỉ nêu mức + limitation. | ĐÃ CHỐT |
+| D-73 | Regex mã căn trong config theo định dạng data. | ĐÃ CHỐT |
+| D-74 | `evidence_artifact_id` chỉ vào lineage. | ĐÃ CHỐT |
+| D-75 | GR-08 kiểm template trước khi điền slot. | ĐÃ CHỐT |
+| D-76 | Enum role = SALES_OPS, SALES_MANAGER, EVALUATOR. | ĐÃ CHỐT |
+| D-77 | `ExportArtifactReader` (P4), `INSIGHT_ARTIFACT_SOURCE=fixtures\|export`, nguồn demo + golden set tự động. | ĐÃ CHỐT |
+| Q12 | Thay bằng D-71. | ĐÓNG |
+| Q15 | Data pack: `recommended_action` khớp mapping 100%; giữ mapping trong config + CONFLICT khi lệch. | ĐÓNG |
+| Q16 | Data pack xác nhận NULL của `spiff_bonus_vnd` có nghĩa. | ĐÓNG |
+| TC | TC-01 → `SAPPHIRE1-16.231`; TC-04 → The Beverly. | ĐÃ CHỐT |
+
 ## Giả định đặt trong Phase 0
 
 Xem `agents/insight/config/semantic_insight.yaml` (mọi giá trị có `status: PENDING`) và mục "Giả định"

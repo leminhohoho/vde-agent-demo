@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from vdagent_sdk import PluginConfigError
 
-from .contracts import Dec
+from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, ProjectRow, UnitRow
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"  # agents/<name>/.env
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"  # agents/<name>/config
@@ -121,13 +121,13 @@ class PeerTiers(_Config):
 
 
 class MissingRateTiers(_Config):
-    """Bounds (%) of a secondary field's missing rate: ≤note_max fine, ≤warn_max DQ_NOTE/DQ_WARN,
-    from describe_only_min describe-only, above exclude_above the field is dropped (spec 5.5)."""
+    """Inclusive upper bounds (%) of a secondary field's missing rate (spec 5.5): ≤none_max fine,
+    ≤note_max DQ_NOTE, ≤warn_max DQ_WARN, ≤describe_only_max DQ_DESCRIBE_ONLY, above → FIELD_EXCLUDED."""
 
+    none_max: Dec
     note_max: Dec
     warn_max: Dec
-    describe_only_min: Dec
-    exclude_above: Dec
+    describe_only_max: Dec
 
 
 class CoverageTiers(_Config):
@@ -137,6 +137,15 @@ class CoverageTiers(_Config):
     full_min: Dec
     partial_min: Dec
     low_min: Dec
+
+
+class PriorityWithoutRank(_Config):
+    """Priority of candidates that have no severity_rank (spec 6.4 step 1)."""
+
+    T2: Dec
+    T3: Dec
+    T5: Dec
+    T7: Dec
 
 
 class SemanticParams(_Config):
@@ -161,17 +170,39 @@ class SemanticParams(_Config):
     max_key_insights: int
     attribution_sum_tolerance: Dec
     max_units_in_context: int
+    unit_examples_per_cause: int
     min_cause_share_pct: Dec
     conflict_tolerance_pct: Dec
     significance_confidence_pct: Dec
     bootstrap_iterations: int
     bootstrap_seed: int
+    priority_without_rank: PriorityWithoutRank
 
 
 class _ParamEntry(_Config):
     value: Any
     status: ParamStatus
     source: str
+
+
+EvidenceTable = Literal["dm_unit_friction_diagnostics", "fact_unit_inventory_snapshot", "dim_project_profile"]
+EVIDENCE_TABLE_MODELS: dict[str, type[BaseModel]] = {
+    "dm_unit_friction_diagnostics": DiagnosticRow,
+    "fact_unit_inventory_snapshot": InventoryRow,
+    "dim_project_profile": ProjectRow,
+}
+
+
+class EvidenceSpec(_Config):
+    """One DW column backing a cause (spec 6.2 "Bằng chứng tối thiểu")."""
+
+    slot: str
+    table: EvidenceTable
+    field: str
+    unit: BindingUnit | None = None
+    """None: evidence only (e.g. a boolean flag), no numeric slot."""
+    noun: str | None = None
+    signed: bool = False
 
 
 class CauseEntry(_Config):
@@ -181,6 +212,22 @@ class CauseEntry(_Config):
     template: str
     """TEMPLATE fallback sentence for ROOT_CAUSE_SIGNAL (spec 8.2)."""
     recommendation_text: str
+    required_evidence: list[EvidenceSpec]
+    """Missing or DQ-FAIL → the candidate is rejected (EVIDENCE_FIELD_MISSING)."""
+    supplementary_evidence: list[EvidenceSpec] = []
+    """Used when present and not excluded by the gate."""
+    uses_peer_group: bool = False
+    """The claim compares with the DW peer group: peer tiers and BR-07 apply."""
+
+
+PATTERN_TABLE_MODELS: dict[str, type[BaseModel]] = {"dim_unit_master": UnitRow, "fact_unit_inventory_snapshot": InventoryRow}
+
+
+class PatternDimension(_Config):
+    """One T3 grouping column (spec 6.2)."""
+
+    name: str
+    table: Literal["dim_unit_master", "fact_unit_inventory_snapshot"]
 
 
 class _SemanticRaw(_Config):
@@ -190,6 +237,7 @@ class _SemanticRaw(_Config):
     insight_templates: dict[str, str]
     forbidden_phrases: list[str]
     english_whitelist: list[str]
+    pattern_dimensions: list[PatternDimension]
 
 
 class _SemanticFile(_Config):
@@ -205,6 +253,7 @@ class SemanticConfig(_Config):
     forbidden_phrases: tuple[str, ...]
     """NFC + lowercase, ready for GR-02 matching."""
     english_whitelist: tuple[str, ...]
+    pattern_dimensions: tuple[PatternDimension, ...]
 
     @property
     def allowed_cause_codes(self) -> frozenset[str]:
@@ -235,6 +284,13 @@ def load_semantic_config(path: Path) -> SemanticConfig:
     duplicates = sorted({c for c in codes if codes.count(c) > 1})
     if duplicates:
         raise ConfigError(f"{path.name}: duplicate cause_code {', '.join(duplicates)}")
+    for entry in raw.causes:
+        for spec in (*entry.required_evidence, *entry.supplementary_evidence):
+            if spec.field not in EVIDENCE_TABLE_MODELS[spec.table].model_fields:
+                raise ConfigError(f"{path.name}: {entry.cause_code}: {spec.table} has no column {spec.field}")
+    for dim in raw.pattern_dimensions:
+        if dim.name not in PATTERN_TABLE_MODELS[dim.table].model_fields:
+            raise ConfigError(f"{path.name}: pattern dimension: {dim.table} has no column {dim.name}")
     return SemanticConfig(
         version=raw.version,
         params=params,
@@ -243,6 +299,7 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         insight_templates=dict(raw.insight_templates),
         forbidden_phrases=tuple(normalize_phrase(p) for p in raw.forbidden_phrases),
         english_whitelist=tuple(raw.english_whitelist),
+        pattern_dimensions=tuple(raw.pattern_dimensions),
     )
 
 

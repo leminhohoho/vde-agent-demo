@@ -6,3 +6,7 @@ __pycache__/
 .pytest_cache/
 node_modules/
 frontend/dist/
+
+# Real-estate data pack (CSV + load.sql): kept out of git; a small sample lives in
+# agents/insight/vdagent_insight/tests/fixtures/export_sample/
+export/

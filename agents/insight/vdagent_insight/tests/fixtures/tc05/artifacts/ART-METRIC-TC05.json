@@ -1,0 +1,36 @@
+{
+  "artifact_id": "ART-METRIC-TC05",
+  "artifact_type": "metric",
+  "version": 1,
+  "status": "VALID",
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "payload": {
+    "metrics": [
+      {
+        "metric_id": "units_in_scope",
+        "calculation_ref": "metric.units_in_scope@1",
+        "subject": {
+          "type": "project",
+          "id": "PRJ-X",
+          "label": "Dự án X"
+        },
+        "value": "20",
+        "unit": "COUNT",
+        "n": 20
+      },
+      {
+        "metric_id": "overdue_units",
+        "calculation_ref": "metric.overdue_units@1",
+        "subject": {
+          "type": "project",
+          "id": "PRJ-X",
+          "label": "Dự án X"
+        },
+        "value": "0",
+        "unit": "COUNT",
+        "n": 20
+      }
+    ]
+  }
+}

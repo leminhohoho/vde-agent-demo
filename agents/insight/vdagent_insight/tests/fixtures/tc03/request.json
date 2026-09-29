@@ -1,0 +1,62 @@
+{
+  "run_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "task_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attempt": 1,
+  "fencing_token": 1,
+  "intent": "SLOW_MOVING_INVESTIGATION",
+  "tasks": [
+    "T2",
+    "T6",
+    "T7"
+  ],
+  "question_normalized": "Vì sao tòa Aqua 1 có nhiều căn chậm?",
+  "analysis_scope": {
+    "level": "ZONE",
+    "project_ids": [
+      "PRJ-X"
+    ],
+    "zone_ids": [
+      "ZN-AQUA-01"
+    ],
+    "unit_ids": []
+  },
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "user_context": {
+    "user_id": "u_1",
+    "role": "SALES_OPS",
+    "authorized_scope": {
+      "project_ids": [
+        "PRJ-X"
+      ],
+      "zone_ids": []
+    }
+  },
+  "input_artifact_refs": [
+    {
+      "artifact_id": "ART-METRIC-TC03",
+      "artifact_type": "metric",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "da0aabb0e6780ef664c8e97aec4bb37d9756707f650426e8eb9e0fe2a20681a4"
+    },
+    {
+      "artifact_id": "ART-DQ-TC03",
+      "artifact_type": "dq",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "ba15f1cb8be11ead026779c1dd2d0904098b799ce2c003aae0df0843f5c77a9a"
+    },
+    {
+      "artifact_id": "ART-DATASET-TC03",
+      "artifact_type": "dataset",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "1193212c63b1bfd01fa7f325c4d43fa5bc4a8497005fe14b5cb52d9553c2c81f"
+    }
+  ],
+  "constraints": {
+    "language": "vi",
+    "deadline_ms": 60000
+  }
+}

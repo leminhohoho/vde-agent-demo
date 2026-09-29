@@ -1,0 +1,476 @@
+{
+  "artifact_id": "ART-METRIC-TC21",
+  "artifact_type": "metric",
+  "version": 1,
+  "status": "VALID",
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "payload": {
+    "metrics": [
+      {
+        "metric_id": "units_in_scope",
+        "calculation_ref": "metric.units_in_scope@1",
+        "subject": {
+          "type": "project",
+          "id": "PRJ-X",
+          "label": "Dự án X"
+        },
+        "value": "40",
+        "unit": "COUNT",
+        "n": 40
+      },
+      {
+        "metric_id": "overdue_units",
+        "calculation_ref": "metric.overdue_units@1",
+        "subject": {
+          "type": "project",
+          "id": "PRJ-X",
+          "label": "Dự án X"
+        },
+        "value": "40",
+        "unit": "COUNT",
+        "n": 40
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U001",
+          "label": "A-03.01"
+        },
+        "value": "101",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U002",
+          "label": "A-03.02"
+        },
+        "value": "102",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U003",
+          "label": "A-03.03"
+        },
+        "value": "103",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U004",
+          "label": "A-03.04"
+        },
+        "value": "104",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U005",
+          "label": "A-04.01"
+        },
+        "value": "105",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U006",
+          "label": "A-04.02"
+        },
+        "value": "106",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U007",
+          "label": "A-04.03"
+        },
+        "value": "107",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U008",
+          "label": "A-04.04"
+        },
+        "value": "108",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U009",
+          "label": "A-05.01"
+        },
+        "value": "109",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U010",
+          "label": "A-05.02"
+        },
+        "value": "110",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U011",
+          "label": "A-05.03"
+        },
+        "value": "111",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U012",
+          "label": "A-05.04"
+        },
+        "value": "112",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U013",
+          "label": "A-06.01"
+        },
+        "value": "113",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U014",
+          "label": "A-06.02"
+        },
+        "value": "114",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U015",
+          "label": "A-06.03"
+        },
+        "value": "115",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U016",
+          "label": "A-06.04"
+        },
+        "value": "116",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U017",
+          "label": "A-07.01"
+        },
+        "value": "117",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U018",
+          "label": "A-07.02"
+        },
+        "value": "118",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U019",
+          "label": "A-07.03"
+        },
+        "value": "119",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U020",
+          "label": "A-07.04"
+        },
+        "value": "120",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U021",
+          "label": "A-08.01"
+        },
+        "value": "121",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U022",
+          "label": "A-08.02"
+        },
+        "value": "122",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U023",
+          "label": "A-08.03"
+        },
+        "value": "123",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U024",
+          "label": "A-08.04"
+        },
+        "value": "124",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U025",
+          "label": "A-09.01"
+        },
+        "value": "125",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U026",
+          "label": "A-09.02"
+        },
+        "value": "126",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U027",
+          "label": "A-09.03"
+        },
+        "value": "127",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U028",
+          "label": "A-09.04"
+        },
+        "value": "128",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U029",
+          "label": "A-10.01"
+        },
+        "value": "129",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U030",
+          "label": "A-10.02"
+        },
+        "value": "130",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U031",
+          "label": "A-10.03"
+        },
+        "value": "131",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U032",
+          "label": "A-10.04"
+        },
+        "value": "132",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U033",
+          "label": "A-11.01"
+        },
+        "value": "133",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U034",
+          "label": "A-11.02"
+        },
+        "value": "134",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U035",
+          "label": "A-11.03"
+        },
+        "value": "135",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U036",
+          "label": "A-11.04"
+        },
+        "value": "136",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U037",
+          "label": "A-12.01"
+        },
+        "value": "137",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U038",
+          "label": "A-12.02"
+        },
+        "value": "138",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U039",
+          "label": "A-12.03"
+        },
+        "value": "139",
+        "unit": "DAY"
+      },
+      {
+        "metric_id": "unsold_days_dom",
+        "calculation_ref": "dw.unsold_days_dom@3.1.0",
+        "subject": {
+          "type": "unit",
+          "id": "U040",
+          "label": "A-12.04"
+        },
+        "value": "140",
+        "unit": "DAY"
+      }
+    ]
+  }
+}

@@ -61,6 +61,12 @@ def test_shipped_semantic_config_has_the_spec_defaults() -> None:
     assert (p.min_group_size, p.min_effect_size_days) == (5, 15)
     assert (p.freshness_warn_hours, p.freshness_error_hours) == (24, 72)
     assert p.mnar_gap_pct == Decimal("10")
+    m = p.missing_rate_tiers
+    assert (m.none_max, m.note_max, m.warn_max, m.describe_only_max) == (5, 10, 20, 40)
+    c = p.coverage_tiers
+    assert (c.full_min, c.partial_min, c.low_min) == (90, 70, 50)
+    r = p.priority_without_rank
+    assert (r.T2, r.T3, r.T5, r.T7) == (Decimal("0.5"), Decimal("0.5"), Decimal("0.3"), Decimal("0"))
     assert p.max_key_insights == 5
     assert p.attribution_sum_tolerance == Decimal("0.001")
 
@@ -79,6 +85,44 @@ def test_cause_catalogue_matches_spec_7_6() -> None:
     assert cfg.allowed_cause_codes == frozenset(SPEC_CAUSES)
     assert cfg.cause_action_mapping == SPEC_CAUSES
     assert cfg.cause("OVERPRICED_VS_PEER").cause_label_vi == "giá cao hơn nhóm tương đồng"
+
+
+SPEC_REQUIRED_EVIDENCE = {
+    "LEGAL_PERMIT_BARRIER": {"is_sales_permit_issued", "is_bank_guarantee_issued"},
+    "SEVERE_PHYSICAL_DEFECT": {"physical_defect_penalty", "price_spread_vs_peer_pct"},
+    "EXTREME_THERMAL_EXPOSURE": {"thermal_view_penalty", "subsidy_duration_mo"},
+    "SECONDARY_ARBITRAGE": {"secondary_price_gap_pct"},
+    "LUMP_SUM_TICKET_BARRIER": {"ticket_size_vs_income_ratio"},
+    "OVERPRICED_VS_PEER": {"price_spread_vs_peer_pct"},
+    "LOW_SALES_INCENTIVE": {"base_commission_pct"},
+    "DEEP_FUNNEL_DROP_OFF": {"funnel_dropoff_rate_pct"},
+}
+LABEL_SLOTS = {"unit", "project", "permit_status", "cause_label", "scope", "subject", "group", "market", "limitation"}
+
+
+def test_required_evidence_per_cause_matches_spec_6_2() -> None:
+    cfg = load_semantic_config(SEMANTIC)
+    for code, fields in SPEC_REQUIRED_EVIDENCE.items():
+        assert {e.field for e in cfg.cause(code).required_evidence} == fields, code
+    assert cfg.cause("OVERPRICED_VS_PEER").uses_peer_group
+    assert cfg.cause("SEVERE_PHYSICAL_DEFECT").uses_peer_group
+    assert not cfg.cause("LOW_SALES_INCENTIVE").uses_peer_group
+
+
+def test_every_numeric_slot_of_a_cause_template_is_bound_by_its_evidence() -> None:
+    cfg = load_semantic_config(SEMANTIC)
+    for c in cfg.causes:
+        bound = {e.slot for e in c.required_evidence if e.unit} | {"dom", "overdue_units"}
+        used = set(re.findall(r"\{\{\s*([a-z_]+)\s*\}\}", c.template)) - LABEL_SLOTS
+        assert used <= bound, (c.cause_code, used - bound)
+
+
+def test_evidence_must_name_a_real_column_of_its_table(tmp_path: Path) -> None:
+    def change(d: dict[str, Any]) -> None:
+        d["semantic_config"]["causes"][0]["required_evidence"][0]["field"] = "no_such_column"
+
+    with pytest.raises(ConfigError, match="no_such_column"):
+        load_semantic_config(mutated(tmp_path, SEMANTIC, change))
 
 
 def test_forbidden_phrases_are_stored_nfc_lowercase() -> None:

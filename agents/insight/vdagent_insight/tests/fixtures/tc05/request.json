@@ -1,0 +1,60 @@
+{
+  "run_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "task_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attempt": 1,
+  "fencing_token": 1,
+  "intent": "SLOW_MOVING_INVESTIGATION",
+  "tasks": [
+    "T1",
+    "T6",
+    "T7"
+  ],
+  "question_normalized": "Vì sao căn bán chậm?",
+  "analysis_scope": {
+    "level": "PROJECT",
+    "project_ids": [
+      "PRJ-X"
+    ],
+    "zone_ids": [],
+    "unit_ids": []
+  },
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "user_context": {
+    "user_id": "u_1",
+    "role": "SALES_OPS",
+    "authorized_scope": {
+      "project_ids": [
+        "PRJ-X"
+      ],
+      "zone_ids": []
+    }
+  },
+  "input_artifact_refs": [
+    {
+      "artifact_id": "ART-METRIC-TC05",
+      "artifact_type": "metric",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "5a76fcab2fb01c0e3c661a1a9ea32edbe68ef2ef275b82b886189546ddaa8f57"
+    },
+    {
+      "artifact_id": "ART-DQ-TC05",
+      "artifact_type": "dq",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "ba15f1cb8be11ead026779c1dd2d0904098b799ce2c003aae0df0843f5c77a9a"
+    },
+    {
+      "artifact_id": "ART-DATASET-TC05",
+      "artifact_type": "dataset",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "703eaa65b964beaf6893d34016360c7cd4a34a2cbd038d32cc3fd774a40d3f2d"
+    }
+  ],
+  "constraints": {
+    "language": "vi",
+    "deadline_ms": 60000
+  }
+}

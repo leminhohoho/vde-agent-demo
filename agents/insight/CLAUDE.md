@@ -29,12 +29,13 @@ vdagent_insight/
   __init__.py   setup(): đăng ký agent        bridge.py  ctx → run_task → emit (P4)          [0, trả kết quả]
   agent.py      pipeline 0–10 (P4)            settings.py  .env + loader YAML có validate    [2]
   contracts.py  model Pydantic                artifacts.py  canonical JSON, Reader/Writer    [1, 2, 10]
-  gate.py       Sufficiency Gate 5.5          candidates/   T1 T2 T3 T5 T7, stats, priority   [3, 4]
+  view.py       join dataset theo căn, BR-01  formatting.py  hiển thị số vi-VN               [3, 4, 8]
+  gate.py       Sufficiency Gate 5.5          candidates/   T1 T2 T3 T5 T7, stats, priority   [3, 4, 5]
   llm/          LlmClient, Fake, gemini, openai, preflight, usage                             [5, 6, R]
   validation.py GR-01→08                      render.py  claim_binder, vi-VN, TEMPLATE       [7, 8]
   assess.py     confidence, KEY, status       memory.py  InsightMemory, NoOpMemory           [2, 9, 10]
   prompts/      system, repair, extract, compact
-  tests/        test_*.py + fixtures/tc01 (request.json + artifacts/*.json)
+  tests/        test_*.py, builders.py, fixtures/tcNN/ (request.json + artifacts/*.json [+ config/])
 ```
 `agent.py`, `bridge.py`, `MemoryMiddleware` và `tests/test_agent.py` là bản LangChain cũ, giữ tới P4 rồi thay.
 

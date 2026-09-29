@@ -1,0 +1,51 @@
+{
+  "artifact_id": "ART-DQ-TC02",
+  "artifact_type": "dq",
+  "version": 1,
+  "status": "VALID",
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "payload": {
+    "overall_status": "PASS",
+    "snapshot_date": "2026-06-30",
+    "data_as_of": "2026-06-30T23:00:00+07:00",
+    "fields": [
+      {
+        "table": "fact_unit_inventory_snapshot",
+        "field": "unsold_days_dom",
+        "status": "PASS",
+        "is_primary": true,
+        "missing_rate_pct": "0",
+        "missing_rate_overdue_pct": null,
+        "missing_rate_sold_pct": null
+      },
+      {
+        "table": "fact_unit_inventory_snapshot",
+        "field": "inventory_status",
+        "status": "PASS",
+        "is_primary": true,
+        "missing_rate_pct": "0",
+        "missing_rate_overdue_pct": null,
+        "missing_rate_sold_pct": null
+      },
+      {
+        "table": "dm_unit_friction_diagnostics",
+        "field": "price_spread_vs_peer_pct",
+        "status": "PASS",
+        "is_primary": true,
+        "missing_rate_pct": "0",
+        "missing_rate_overdue_pct": null,
+        "missing_rate_sold_pct": null
+      },
+      {
+        "table": "fact_unit_inventory_snapshot",
+        "field": "asking_price_vnd",
+        "status": "PASS",
+        "is_primary": false,
+        "missing_rate_pct": "0",
+        "missing_rate_overdue_pct": null,
+        "missing_rate_sold_pct": null
+      }
+    ]
+  }
+}

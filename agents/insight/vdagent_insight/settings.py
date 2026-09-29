@@ -12,6 +12,7 @@ the offending key. `SemanticConfigRegistry` serves each semantic_config version,
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from vdagent_sdk import PluginConfigError
 
 from .contracts import BindingUnit, Dec, DiagnosticRow, InventoryRow, MacroRow, ProjectRow, UnitRow
@@ -247,6 +248,51 @@ class MarketMetric(_Config):
     """True: latest vs first month of the window; False: latest level only (inferred in the DW)."""
 
 
+class LanguageConfig(_Config):
+    """Catalogues of the validator and the renderer (spec 5.3 GR-01..GR-08, 8.2; D-20..D-26, D-73)."""
+
+    label_slots: tuple[str, ...]
+    quantity_words: tuple[str, ...]
+    strong_comparison_phrases: tuple[str, ...]
+    imperative_phrases: tuple[str, ...]
+    recommendation_prefixes: tuple[str, ...]
+    english_stopwords: tuple[str, ...]
+    injection_patterns: tuple[str, ...]
+    unit_code_pattern: str
+    max_words: int = Field(gt=0)
+    permit_status_labels: dict[Literal["permit", "guarantee", "both"], str]
+    peer_hidden_template: str
+    chart_hints: dict[str, str]
+    limitation_messages: dict[str, str]
+
+    @field_validator(
+        "quantity_words", "strong_comparison_phrases", "imperative_phrases", "recommendation_prefixes", "english_stopwords"
+    )
+    @classmethod
+    def _normalised(cls, phrases: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(normalize_phrase(p) for p in phrases)
+
+    @field_validator("injection_patterns")
+    @classmethod
+    def _patterns_compile(cls, patterns: tuple[str, ...]) -> tuple[str, ...]:
+        for p in patterns:
+            _compile(p, "injection_patterns")
+        return patterns
+
+    @field_validator("unit_code_pattern")
+    @classmethod
+    def _unit_code_compiles(cls, pattern: str) -> str:
+        _compile(pattern, "unit_code_pattern")
+        return pattern
+
+
+def _compile(pattern: str, key: str) -> None:
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"{key}: invalid regex {pattern!r}: {exc}") from None
+
+
 class _SemanticRaw(_Config):
     version: str = Field(min_length=1)
     params: dict[str, _ParamEntry]
@@ -256,6 +302,7 @@ class _SemanticRaw(_Config):
     english_whitelist: list[str]
     pattern_dimensions: list[PatternDimension]
     market_metrics: list[MarketMetric]
+    language: LanguageConfig
 
 
 class _SemanticFile(_Config):
@@ -273,6 +320,7 @@ class SemanticConfig(_Config):
     english_whitelist: tuple[str, ...]
     pattern_dimensions: tuple[PatternDimension, ...]
     market_metrics: tuple[MarketMetric, ...]
+    language: LanguageConfig
 
     @property
     def allowed_cause_codes(self) -> frozenset[str]:
@@ -332,6 +380,7 @@ def load_semantic_config(path: Path) -> SemanticConfig:
         english_whitelist=tuple(raw.english_whitelist),
         pattern_dimensions=tuple(raw.pattern_dimensions),
         market_metrics=tuple(raw.market_metrics),
+        language=raw.language,
     )
 
 

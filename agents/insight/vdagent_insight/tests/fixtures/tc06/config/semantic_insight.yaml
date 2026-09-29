@@ -151,8 +151,8 @@ semantic_config:
   - cause_code: LEGAL_PERMIT_BARRIER
     cause_label_vi: vướng mắc pháp lý / giấy phép bán hàng
     action_code: EXPEDITE_LEGAL_PROCEDURES
-    template: Dự án {{project}} chưa đủ {{permit_status}}; đây là yếu tố có khả năng
-      liên quan tới {{overdue_units}} căn quá hạn.
+    template: Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu
+      tố có khả năng liên quan tới {{overdue_units}} căn quá hạn.
     recommendation_text: Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý và bảo
       lãnh ngân hàng trước khi mở bán đại trà.
     required_evidence:
@@ -165,7 +165,8 @@ semantic_config:
   - cause_code: SEVERE_PHYSICAL_DEFECT
     cause_label_vi: khuyết điểm vật lý của căn
     action_code: DEFECT_COMPENSATION_DISCOUNT
-    template: Căn {{unit}} tồn {{dom}}; điểm phạt khuyết tật {{defect}}.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (điểm phạt khuyết tật {{defect}}, giá so với nhóm tương đồng {{spread}}).'
     recommendation_text: Đề xuất xem xét chính sách chiết khấu bù trừ cho khuyết điểm
       công năng của căn.
     required_evidence:
@@ -188,7 +189,8 @@ semantic_config:
   - cause_code: EXTREME_THERMAL_EXPOSURE
     cause_label_vi: hướng nắng gắt / nhiệt cao
     action_code: INSULATION_INTERIOR_PACKAGE
-    template: Căn {{unit}} tồn {{dom}}; điểm phạt nhiệt/hướng {{thermal}}.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (điểm phạt nhiệt/hướng {{thermal}}, hỗ trợ lãi suất {{subsidy}}).'
     recommendation_text: Đề xuất xem xét gói nội thất cách nhiệt kèm ưu đãi phí quản
       lý cho căn.
     required_evidence:
@@ -204,7 +206,8 @@ semantic_config:
   - cause_code: SECONDARY_ARBITRAGE
     cause_label_vi: giá sơ cấp cao hơn thị trường thứ cấp
     action_code: EXTENDED_PAYMENT_SCHEDULE
-    template: Căn {{unit}} tồn {{dom}}; giá sơ cấp cao hơn thứ cấp {{secondary_gap}}.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (giá sơ cấp so với thứ cấp {{secondary_gap}}).'
     recommendation_text: Đề xuất xem xét giãn tiến độ thanh toán để kéo giá ròng về
       gần mặt bằng thứ cấp.
     required_evidence:
@@ -216,8 +219,8 @@ semantic_config:
   - cause_code: LUMP_SUM_TICKET_BARRIER
     cause_label_vi: giá trị căn quá cao so với thu nhập
     action_code: BANK_SUBSIDY_EXTENSION
-    template: Căn {{unit}} tồn {{dom}}; giá trị căn gấp {{ticket_ratio}} lần thu nhập
-      năm.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (giá trị căn bằng {{ticket_ratio}} thu nhập năm của hộ gia đình).'
     recommendation_text: Đề xuất xem xét kéo dài thời gian hỗ trợ lãi suất và ân hạn
       nợ gốc cùng ngân hàng đối tác.
     required_evidence:
@@ -228,7 +231,8 @@ semantic_config:
   - cause_code: OVERPRICED_VS_PEER
     cause_label_vi: giá cao hơn nhóm tương đồng
     action_code: TARGETED_PRICE_CORRECTION
-    template: Căn {{unit}} tồn {{dom}}; đơn giá/m² cao hơn trung vị peer {{spread}}.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (đơn giá/m² so với trung vị peer {{spread}}).'
     recommendation_text: Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung
       vị nhóm tương đồng.
     required_evidence:
@@ -255,7 +259,8 @@ semantic_config:
   - cause_code: LOW_SALES_INCENTIVE
     cause_label_vi: động lực bán hàng của sàn thấp
     action_code: BOOST_BROKER_COMMISSION
-    template: Căn {{unit}} tồn {{dom}}; hoa hồng sàn {{commission}}.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (hoa hồng sàn {{commission}}).'
     recommendation_text: Đề xuất xem xét nâng hoa hồng hoặc thưởng chốt cọc cho sàn
       môi giới.
     required_evidence:
@@ -271,7 +276,8 @@ semantic_config:
   - cause_code: DEEP_FUNNEL_DROP_OFF
     cause_label_vi: khách rơi nhiều ở phễu bán hàng
     action_code: SALES_PITCH_AUDIT
-    template: Căn {{unit}} tồn {{dom}}; tỷ lệ rơi phễu {{dropoff}}.
+    template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan: {{cause_label}}
+      (tỷ lệ rút cọc {{dropoff}}).'
     recommendation_text: Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam
       kết với khách giữ chỗ.
     required_evidence:
@@ -347,3 +353,134 @@ semantic_config:
   - PIR
   - MOI
   - m²
+  language:
+    label_slots:
+    - unit
+    - project
+    - zone
+    - scope
+    - subject
+    - group
+    - market
+    - cause_label
+    - permit_status
+    - limitation
+    quantity_words:
+    - một nửa
+    - gấp đôi
+    - gấp ba
+    - phần tư
+    - phần ba
+    - chục
+    - trăm
+    - nghìn
+    - ngàn
+    - triệu
+    - tỷ
+    - hàng loạt
+    - đa số
+    - phần lớn
+    strong_comparison_phrases:
+    - cao hơn rõ
+    - thấp hơn rõ
+    - chậm hơn rõ
+    - nhanh hơn rõ
+    - vượt trội
+    - đáng kể
+    - khác biệt rõ
+    - nổi bật
+    imperative_phrases:
+    - hãy
+    - phải
+    - ngay lập tức
+    - bắt buộc
+    - đã giảm
+    - đã điều chỉnh
+    - đã tăng
+    recommendation_prefixes:
+    - Đề xuất
+    - Có thể cân nhắc
+    english_stopwords:
+    - the
+    - is
+    - are
+    - was
+    - were
+    - and
+    - of
+    - for
+    - with
+    - vs
+    - than
+    - unit
+    - units
+    - price
+    - prices
+    - overpriced
+    - because
+    - due
+    - higher
+    - lower
+    - slower
+    - faster
+    - sales
+    - this
+    - that
+    - has
+    - have
+    - not
+    - which
+    injection_patterns:
+    - bỏ qua (mọi |tất cả )?(các )?(hướng dẫn|chỉ thị)
+    - ignore (all |any )?(previous |prior )?instructions
+    - '\bsystem\s*:'
+    - \bbạn là\b
+    - \byou are\b
+    - https?://
+    unit_code_pattern: '[A-Z][A-Z0-9]*-\d{2}\.\d{3}'
+    max_words: 40
+    permit_status_labels:
+      permit: giấy phép mở bán
+      guarantee: bảo lãnh ngân hàng
+      both: giấy phép mở bán và bảo lãnh ngân hàng
+    peer_hidden_template: 'Căn {{unit}} tồn {{dom}}; yếu tố có khả năng liên quan:
+      {{cause_label}} (nhóm tương đồng quá ít căn để so sánh).'
+    chart_hints:
+      ROOT_CAUSE_SIGNAL: kpi_card
+      CAUSE_DISTRIBUTION: stacked_bar
+      PATTERN: bar
+      MARKET_CONTEXT: line
+    limitation_messages:
+      DQ_NOTE: một phần nhỏ dữ liệu của trường này bị thiếu
+      DQ_WARN: dữ liệu của trường này thiếu ở mức cần lưu ý, mức tin cậy được hạ một
+        bậc
+      DQ_DESCRIBE_ONLY: dữ liệu thiếu nhiều nên chỉ mô tả, không so sánh hay quy nguyên
+        nhân
+      FIELD_EXCLUDED: trường dữ liệu thiếu quá nhiều nên không được sử dụng
+      MISSING_NOT_RANDOM: dữ liệu thiếu không ngẫu nhiên giữa căn quá hạn và căn đã
+        bán
+      EVIDENCE_FIELD_MISSING: thiếu dữ liệu bắt buộc để làm bằng chứng
+      PARTIAL_COVERAGE: chỉ một phần căn quá hạn có đủ dữ liệu chẩn đoán
+      LOW_COVERAGE: số căn có đủ dữ liệu chẩn đoán còn thấp nên chỉ mô tả
+      INSUFFICIENT_COVERAGE: không đủ căn có dữ liệu chẩn đoán để kết luận ở cấp này
+      SMALL_SAMPLE: cỡ mẫu nhỏ nên chỉ mô tả, không so sánh
+      GROUP_TOO_SMALL: nhóm quá ít căn để so sánh
+      OUTLIER_WARN: có giá trị bất thường so với các căn cùng nhóm
+      OUTLIER_EXCLUDED: có giá trị cực đoan so với các căn cùng nhóm
+      STALE_SNAPSHOT: dữ liệu tồn kho và giá chưa được cập nhật gần đây
+      PEER_SAMPLE_CONSTRAINED: nhóm tương đồng phải mở rộng sang tầng lân cận do thiếu
+        mẫu
+      PEER_DATA_MISSING: thiếu số liệu so sánh với nhóm tương đồng
+      NO_OVERDUE_UNITS: không có căn quá hạn trong phạm vi
+      MARKET_CONTEXT_MISSING: không có dữ liệu bối cảnh thị trường cho yêu cầu này
+      INFERRED_MARKET_METRIC: một số chỉ số thị trường là giá trị suy luận nên chỉ
+        nêu mức, không nêu xu hướng
+      CONFLICT: các nguồn dữ liệu chưa nhất quán, cần kiểm tra trước khi kết luận
+      PRIMARY_CAUSE_MISMATCH: nguyên nhân chính trong bảng chẩn đoán khác với bảng
+        nguyên nhân chi tiết
+      ATTRIBUTION_SUM_MISMATCH: tổng tỷ trọng các nguyên nhân của căn chưa khớp
+      ACTION_CODE_MISMATCH: khuyến nghị trong bảng chẩn đoán khác với danh mục khuyến
+        nghị
+      SOURCE_MISMATCH: hai nguồn dữ liệu cùng kỳ cho số liệu khác nhau
+      LEGAL_FLAGS_MISMATCH: dự án đã đủ giấy tờ pháp lý nhưng vẫn được gắn yếu tố
+        pháp lý

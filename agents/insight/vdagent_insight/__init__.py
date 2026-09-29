@@ -8,7 +8,7 @@ from typing import Any
 
 from vdagent_sdk import PluginAPI
 
-from .agent import DESCRIPTION, NAME, build_agent
+from .legacy_agent import DESCRIPTION, NAME, build_agent
 from .settings import read_env
 
 

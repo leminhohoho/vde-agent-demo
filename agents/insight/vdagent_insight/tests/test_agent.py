@@ -27,7 +27,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from vdagent_sdk import Agent, AgentTimeoutError, McpEndpoint, Message, Note, Peer, PluginConfigError, ToolCall
 
 from .. import setup
-from ..agent import DESCRIPTION, NAME, STEP_LIMIT_TEXT, LangChainAgent, build_agent
+from ..legacy_agent import DESCRIPTION, NAME, STEP_LIMIT_TEXT, LangChainAgent, build_agent
 from ..mcp_client import MAX_TOOL_RESULT_CHARS, TRUNCATION_MARKER, McpSession, McpTool, ToolOutcome
 from ..settings import load_settings, read_env
 

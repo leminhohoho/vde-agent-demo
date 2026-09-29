@@ -368,3 +368,17 @@ def test_llm_usage_cost_is_decimal_or_null_when_pricing_is_missing() -> None:
     for bad in ({"cost_usd": 0.00719}, {"call_type": "EXTRA"}, {"provider": "anthropic"}):
         with pytest.raises(ValidationError):
             LlmUsage.model_validate(usage_data(**bad))
+
+
+@pytest.mark.parametrize(
+    ("role", "ok"),
+    [("SALES_OPS", True), ("SALES_MANAGER", True), ("EVALUATOR", True), ("PROJECT_DIRECTOR", False), ("sales_ops", False)],
+)
+def test_d76_roles_are_those_of_the_data_pack_in_upper_case(role: str, ok: bool) -> None:
+    data = request_data()
+    data["user_context"] = {**data["user_context"], "role": role}
+    if ok:
+        assert InsightTaskRequest.model_validate(data).user_context.role == role
+    else:
+        with pytest.raises(ValidationError):
+            InsightTaskRequest.model_validate(data)

@@ -72,7 +72,8 @@ BindingUnit = Literal["DAY", "PCT", "VND", "VND_PER_M2", "RATIO", "COUNT", "SCOR
 ConfidenceLevel = Literal["HIGH", "MEDIUM", "LOW"]
 Materiality = Literal["KEY", "SUPPORTING"]
 ArtifactStatus = Literal["VALID", "PARTIAL", "INVALID"]
-Role = Literal["SALES_OPS", "SALES_MANAGER", "PROJECT_DIRECTOR", "DATA_ANALYST"]
+Role = Literal["SALES_OPS", "SALES_MANAGER", "EVALUATOR"]
+"""Roles of the data pack `users` table, upper-cased by the Orchestrator (D-76)."""
 Provider = Literal["gemini", "openai"]
 CallType = Literal["MAIN", "REPAIR", "MEMORY"]
 

@@ -42,6 +42,8 @@ semantic_config:
     significance_confidence_pct: {value: "95", status: PENDING, source: "spec 5.5 (Wilson / bootstrap)"}
     bootstrap_iterations: {value: 1000, status: PENDING, source: "assumed (spec 5.5)"}
     bootstrap_seed: {value: 20260630, status: PENDING, source: "assumed (luật 11: seed cố định)"}
+    # priority of a candidate without severity_rank (spec 6.4); T7 is always kept, its value is assumed.
+    priority_without_rank: {value: {T2: "0.5", T3: "0.5", T5: "0.3", T7: "0"}, status: PENDING, source: "spec 6.4 (T7 assumed)"}
 
   # Spec 7.6. action_code follows DW 4.3; recommendation_text is our draft (Sales Ops to review).
   causes:

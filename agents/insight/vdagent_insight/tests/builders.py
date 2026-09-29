@@ -15,6 +15,7 @@ from ..contracts import (
     DiagnosticRow,
     DqFieldResult,
     DqPayload,
+    InsightCandidate,
     InventoryRow,
     ProjectRow,
     UnitRow,
@@ -154,3 +155,29 @@ def dq(fields: Sequence[DqFieldResult] = (), status: str = "PASS", data_as_of: s
 
 def scope(level: str = "PROJECT", **ids: list[str]) -> AnalysisScope:
     return AnalysisScope.model_validate({"level": level, **ids})
+
+
+def candidate(candidate_id: str, task: str = "T1", priority: str = "0.5", subject_id: str = "U001") -> InsightCandidate:
+    insight_type = {
+        "T1": "ROOT_CAUSE_SIGNAL",
+        "T2": "CAUSE_DISTRIBUTION",
+        "T3": "PATTERN",
+        "T5": "MARKET_CONTEXT",
+        "T7": "DATA_LIMITATION",
+    }
+    return InsightCandidate.model_validate(
+        {
+            "candidate_id": candidate_id,
+            "task": task,
+            "insight_type": insight_type[task],
+            "level": "UNIT",
+            "subject": {"type": "unit", "id": subject_id, "label": subject_id},
+            "slots": {},
+            "evidence_refs": [],
+            "lineage": {"source_refs": [], "calculation_refs": []},
+            "significant": False,
+            "confidence": "HIGH",
+            "dq_flags": [],
+            "priority": priority,
+        }
+    )

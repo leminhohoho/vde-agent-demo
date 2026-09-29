@@ -65,6 +65,8 @@ def test_shipped_semantic_config_has_the_spec_defaults() -> None:
     assert (m.none_max, m.note_max, m.warn_max, m.describe_only_max) == (5, 10, 20, 40)
     c = p.coverage_tiers
     assert (c.full_min, c.partial_min, c.low_min) == (90, 70, 50)
+    r = p.priority_without_rank
+    assert (r.T2, r.T3, r.T5, r.T7) == (Decimal("0.5"), Decimal("0.5"), Decimal("0.3"), Decimal("0"))
     assert p.max_key_insights == 5
     assert p.attribution_sum_tolerance == Decimal("0.001")
 

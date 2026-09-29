@@ -139,6 +139,15 @@ class CoverageTiers(_Config):
     low_min: Dec
 
 
+class PriorityWithoutRank(_Config):
+    """Priority of candidates that have no severity_rank (spec 6.4 step 1)."""
+
+    T2: Dec
+    T3: Dec
+    T5: Dec
+    T7: Dec
+
+
 class SemanticParams(_Config):
     overdue_threshold_days: int
     peer_area_tolerance_pct: Dec
@@ -166,6 +175,7 @@ class SemanticParams(_Config):
     significance_confidence_pct: Dec
     bootstrap_iterations: int
     bootstrap_seed: int
+    priority_without_rank: PriorityWithoutRank
 
 
 class _ParamEntry(_Config):

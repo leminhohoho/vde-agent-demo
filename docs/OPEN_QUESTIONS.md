@@ -75,6 +75,21 @@ Chi tiết và số liệu: `docs/INSIGHT_P2_P5_DECISIONS.md` (mục "Quyết đ
 
 Chi phí probe: 0,00008 USD. Model ID trong `config/llm.yaml` giữ nguyên. Egress trong docker-compose kiểm ở P5.
 
+## Phase 3 (LLM adapters, pre-flight, repair, cost)
+
+| # | Quyết định / giả định | Trạng thái |
+|---|---|---|
+| P3-1 | Schema gửi provider (D-34): sinh từ Pydantic, inline `$ref`, mọi object đóng + mọi field `required` (optional → nullable), bỏ `title`/`default`/giới hạn độ dài; Pydantic kiểm đầy đủ sau khi nhận. | CHỐT (kỹ thuật) |
+| P3-2 | Phân loại lỗi (D-35): timeout, 429, 5xx, lỗi mạng → E08 (retry 1 lần sau 1 s → OpenAI → TEMPLATE); 400, safety, hết token, JSON sai schema → E09 → 1 lần repair tới **provider vừa trả lời** (reasoning low) → TEMPLATE theo item. | CHỐT |
+| P3-3 | TC-18 thực hiện theo D-35: Gemini lỗi 2 lần (1 + 1 retry), OpenAI 503 → TEMPLATE (spec ghi "3 lần"). | Chờ cập nhật spec |
+| P3-4 | Prompt v2 ở `prompts/v2/` (bản LangChain cũ còn đọc `prompts/system.md` tới P4). `prompt_version` ghi trong file prompt phải khớp `config/llm.yaml` (có test). Hiện `insight-prompt-1.2.0`. | TẠM (P4 chuyển về `prompts/`) |
+| P3-5 | Trong prompt, candidate mang mã ngắn `c1`, `c2`… kèm danh sách `refs` hợp lệ; câu trả lời được đổi về id thật trước khi validate. Lý do (live 29/09): id dài làm Gemini vượt `max_output_tokens`; model đoán sai ref (`.cause` thay cho `.cause_label`) và ghi tên slot có ngoặc `{{…}}` (được chuẩn hóa). | CHỐT (kỹ thuật) |
+| P3-6 | Model được yêu cầu để `skipped` rỗng; hệ thống tự ghi LLM_SKIPPED (giảm output token). | TẠM |
+| P3-7 | Test live chỉ chạy khi `INSIGHT_LIVE=1` **và** có key (tránh tốn tiền/không ổn định trong test thường, commit gate và CI). | TẠM |
+| P3-8 | `LlmUsage` đi qua interface `UsageSink`; store SQLite làm ở P4. Cảnh báo PRICING_MISSING / HIDDEN_THINKING / vượt ngân sách ngày chỉ log WARNING. | TẠM |
+| P3-9 | Cache hit = 0 trong mọi lần chạy live: phần tĩnh (~2.200 token) có thể dưới ngưỡng implicit cache của Gemini, hoặc cần gọi dày hơn. Theo dõi ở P5; có thể dùng explicit cache (`cached_content`). | MỞ |
+| P3-10 | Chưa lần chạy live nào phải dùng OpenAI fallback (Gemini ổn định); nhánh fallback mới được kiểm bằng mock + probe D-30. | Ghi nhận |
+
 ## Phase 2 (validation, render, TEMPLATE, assess): mặc định đã áp dụng
 
 Các mục D chưa được chốt riêng; coding agent làm theo **đề xuất mặc định** trong

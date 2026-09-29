@@ -64,7 +64,7 @@ semantic_config:
     - cause_code: LEGAL_PERMIT_BARRIER
       cause_label_vi: "vướng mắc pháp lý / giấy phép bán hàng"
       action_code: EXPEDITE_LEGAL_PROCEDURES
-      template: "Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}} căn quá hạn."
+      template: "Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}} quá hạn."
       recommendation_text: "Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý và bảo lãnh ngân hàng trước khi mở bán đại trà."
       required_evidence:
         - {slot: permit, table: dim_project_profile, field: is_sales_permit_issued}

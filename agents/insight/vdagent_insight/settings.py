@@ -226,6 +226,8 @@ class LanguageConfig(_Config):
     dom_slots: tuple[str, ...] = ()
     dom_words: tuple[str, ...] = ()
     dom_word_exceptions: tuple[str, ...] = ()
+    scope_nouns: dict[Literal["MARKET", "PROJECT", "ZONE", "UNIT"], str] = {}
+    scope_words: tuple[str, ...] = ()
     strong_comparison_phrases: tuple[str, ...]
     imperative_phrases: tuple[str, ...]
     recommendation_prefixes: tuple[str, ...]
@@ -245,6 +247,7 @@ class LanguageConfig(_Config):
         "label_phrases",
         "dom_words",
         "dom_word_exceptions",
+        "scope_words",
         "strong_comparison_phrases",
         "imperative_phrases",
         "recommendation_prefixes",

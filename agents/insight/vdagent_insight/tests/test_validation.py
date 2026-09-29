@@ -277,3 +277,22 @@ def test_dom_words_without_a_dom_slot_are_rejected_but_inventory_is_not_dom() ->
     assert "DOM_MISSING" in {v.code for v in validate_item(lingering, {c.candidate_id: c}, CFG, request())}
     stock = t2_item("{{cause_label}} chiếm {{weighted_share}} theo dữ liệu tồn kho.", c)
     assert validate_item(stock, {c.candidate_id: c}, CFG, request()) == []
+
+
+# ---- the scope noun comes from code (P5 polish) -------------------------------------------------------------
+
+
+def test_q3_the_model_does_not_write_toa_or_du_an_itself() -> None:
+    """Live P5 Q3: "tại tòa này" for a project; the noun follows the level via {{scope_noun}}."""
+    c = t2_candidate()
+    bad = t2_item("Tại tòa này, {{cause_label}} chiếm {{weighted_share}}.", c)
+    assert "SCOPE_NOUN_WRITTEN" in {v.code for v in validate_item(bad, {c.candidate_id: c}, CFG, request())}
+    slots = [{"slot": s, "ref": f"{c.candidate_id}.{s}"} for s in ("scope_noun", "scope", "cause_label", "weighted_share")]
+    good = DraftItem.model_validate(
+        {
+            "candidate_ids": [c.candidate_id],
+            "template": "Tại {{scope_noun}} {{scope}}, {{cause_label}} chiếm {{weighted_share}}.",
+            "slots": slots,
+        }
+    )
+    assert validate_item(good, {c.candidate_id: c}, CFG, request()) == []

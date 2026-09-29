@@ -161,7 +161,7 @@ def test_every_numeric_slot_of_a_cause_template_is_bound_by_its_evidence() -> No
     cfg = load_semantic_config(SEMANTIC)
     for c in cfg.causes:
         bound = {e.slot for e in c.required_evidence if e.unit} | {"dom", "overdue_units"}
-        used = set(re.findall(r"\{\{\s*([a-z_]+)\s*\}\}", c.template)) - LABEL_SLOTS
+        used = set(re.findall(r"\{\{\s*([a-z_]+)\s*\}\}", c.template)) - set(cfg.language.label_slots)
         assert used <= bound, (c.cause_code, used - bound)
 
 

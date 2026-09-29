@@ -165,3 +165,17 @@ def test_q2_ratio_and_count_slots_are_rendered_with_their_fixed_label() -> None:
         "Giá cao hơn nhóm tương đồng chiếm 100% tổng điểm quy nguyên nhân và xuất hiện ở 100% số căn quá hạn."
     )
     assert [b.display for b in claim.numeric_bindings] == ["100%", "100%"]  # the number itself stays bare
+
+
+def test_the_scope_noun_follows_the_level_of_the_subject() -> None:
+    units = [unit(i) for i in range(1, 11)]
+    data = dataset(
+        units, [inventory(i, 100 + i) for i in range(1, 11)], [diagnostic(i, 100 + i) for i in range(1, 11)],
+        [cause(i, "OVERPRICED_VS_PEER") for i in range(1, 11)],
+    )  # fmt: skip
+    for level, ids, noun in (("ZONE", {"zone_ids": ["ZN-AQUA-01"]}, "tòa"), ("PROJECT", {"project_ids": ["PRJ-X"]}, "dự án")):
+        ctx = context(data, tasks=("T2",), analysis_scope=scope(level, **ids))
+        (c,) = t2_candidates(ctx).candidates
+        cid = c.candidate_id
+        refs = {"n": f"{cid}.scope_noun", "s": f"{cid}.scope"}
+        assert bind_claim("Tại {{n}} {{s}}.", refs, {cid: c}, ctx.cfg, ctx.view).rendered_text.startswith(f"Tại {noun} ")

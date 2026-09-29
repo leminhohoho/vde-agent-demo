@@ -75,6 +75,8 @@ def label_for(slot: str, candidate: InsightCandidate, cfg: SemanticConfig, view:
         return cfg.cause(code).cause_label_vi if code in cfg.allowed_cause_codes and code is not None else None
     if slot == "permit_status":
         return _permit_status(candidate, cfg, view)
+    if slot == "scope_noun":  # the level of the subject (= analysis_scope.level for scope-level insights)
+        return cfg.language.scope_nouns.get(candidate.level)
     if slot == "limitation":
         messages = [cfg.language.limitation_messages[f] for f in candidate.dq_flags if f in cfg.language.limitation_messages]
         return "; ".join(dict.fromkeys(messages)) or None

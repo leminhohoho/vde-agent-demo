@@ -69,6 +69,8 @@ def candidate_aliases(candidates: list[InsightCandidate]) -> dict[str, str]:
 
 def _label_slots(c: InsightCandidate, cfg: SemanticConfig) -> list[str]:
     slots = ["subject", *SUBJECT_SLOTS.get(c.subject.type, ())]
+    if c.level in cfg.language.scope_nouns:
+        slots.append("scope_noun")
     if c.cause_code in cfg.allowed_cause_codes:
         slots.append("cause_label")
     if c.cause_code == "LEGAL_PERMIT_BARRIER" and c.level == "PROJECT":

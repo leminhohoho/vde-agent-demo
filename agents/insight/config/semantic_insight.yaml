@@ -64,7 +64,7 @@ semantic_config:
     - cause_code: LEGAL_PERMIT_BARRIER
       cause_label_vi: "vướng mắc pháp lý / giấy phép bán hàng"
       action_code: EXPEDITE_LEGAL_PROCEDURES
-      template: "Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}}."
+      template: "{{scope_noun}} {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}}."
       required_evidence:
         - {slot: permit, table: dim_project_profile, field: is_sales_permit_issued}
         - {slot: guarantee, table: dim_project_profile, field: is_bank_guarantee_issued}
@@ -139,7 +139,7 @@ semantic_config:
   # TEMPLATE fallback per insight_type (spec 8.2). ROOT_CAUSE_SIGNAL uses the per-cause template.
   # Drafts written for Phase 0 (assumed): Sales Ops to review the wording.
   insight_templates:
-    CAUSE_DISTRIBUTION: "Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}} và xuất hiện ở {{unit_share}}."
+    CAUSE_DISTRIBUTION: "Tại {{scope_noun}} {{scope}}, {{cause_label}} chiếm {{weighted_share}} và xuất hiện ở {{unit_share}}."
     PATTERN: "Nhóm {{group}} có DOM trung vị {{group_dom}}, so với {{rest_dom}} ở các căn còn lại; đây là mối liên hệ đi kèm, chưa phải kết luận về nguyên nhân."
     MARKET_CONTEXT: "Bối cảnh thị trường {{market}} trong {{window_months}} gần nhất: lãi suất thả nổi từ {{interest_rate_start}} đến {{interest_rate}}, tỷ lệ hấp thụ từ {{absorption_rate_start}} đến {{absorption_rate}}; thông tin này chỉ mang tính tham khảo."
     DATA_LIMITATION: "Dữ liệu cho {{subject}} còn hạn chế: {{limitation}}."
@@ -186,7 +186,11 @@ semantic_config:
   # D-75): Sales Ops / DA review the wording. Phrase lists are matched after NFC + lowercase.
   language:
     # {{slots}} filled with text, not numbers (D-22).
-    label_slots: [unit, project, zone, scope, subject, group, market, cause_label, permit_status, limitation]
+    label_slots: [unit, project, zone, scope, scope_noun, subject, group, market, cause_label, permit_status, limitation]
+    # {{scope_noun}}: the noun of the subject's level, written by code (P5); the model never writes
+    # these nouns itself (SCOPE_NOUN_WRITTEN).
+    scope_nouns: {MARKET: "thị trường", PROJECT: "dự án", ZONE: "tòa", UNIT: "căn"}
+    scope_words: ["tòa", "toà", "dự án", "phân khu"]
     # GR-01: quantity words that state a number without a slot (D-21).
     quantity_words: ["một nửa", "gấp đôi", "gấp ba", "phần tư", "phần ba", "chục", "trăm", "nghìn", "ngàn", "triệu", "tỷ", "hàng loạt", "đa số", "phần lớn"]
     # Words that contain a quantity word but state no number ("tỷ lệ" is a ratio, not a billion; P5).

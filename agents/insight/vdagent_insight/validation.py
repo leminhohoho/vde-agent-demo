@@ -13,6 +13,7 @@ config (`action_texts`), never from the model.
 | GR-03 | E11 | unknown candidate, a ref outside the item's candidates, a slot the candidate lacks, template slots ≠ slot refs |
 | GR-01 | SLOT_LABEL_WRITTEN | a `label_phrases` phrase, or the slot's own code label, right next to a numeric slot |
 | GR-03 | DOM_MISSING | a unit root cause without a DOM slot, or "tồn"/"DOM" in the sentence without one |
+| GR-04 | SCOPE_NOUN_WRITTEN | "tòa" / "dự án" written by the model instead of `{{scope_noun}}` |
 | GR-04 | SCOPE_VIOLATION | a literal unit code (`language.unit_code_pattern`): codes only come through slots |
 | GR-06 | (config) | `action_texts` must be suggestions: checked when the config is loaded (settings.py) |
 | GR-07 | STRONG_CLAIM_NOT_SIGNIFICANT | a strong comparison on a candidate that is not `significant` |
@@ -170,6 +171,14 @@ def _dom(item: DraftItem, given: list[InsightCandidate], cfg: SemanticConfig) ->
     return []
 
 
+def _scope_words(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
+    """ "tòa" / "dự án" come from {{scope_noun}} (by level), never from the model."""
+    written = [w for w in cfg.language.scope_words if _has_phrase(SLOT.sub(" ", item.template), w)]
+    if written:
+        return [Violation("GR-04", "SCOPE_NOUN_WRITTEN", f"use {{{{scope_noun}}}} instead of {written}: {item.template!r}")]
+    return []
+
+
 def _statistic(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
     """A median slot (`language.median_slots`) must not be called an average."""
     lang = cfg.language
@@ -198,6 +207,7 @@ def validate_item(
         + _language(item, given, cfg)
         + _slot_labels(item, cfg)
         + _dom(item, given, cfg)
+        + _scope_words(item, cfg)
         + _statistic(item, cfg)
         + _length(item, cfg)
     )

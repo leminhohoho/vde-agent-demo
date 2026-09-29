@@ -151,8 +151,8 @@ semantic_config:
   - cause_code: LEGAL_PERMIT_BARRIER
     cause_label_vi: vướng mắc pháp lý / giấy phép bán hàng
     action_code: EXPEDITE_LEGAL_PROCEDURES
-    template: Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu
-      tố có khả năng liên quan tới {{overdue_units}}.
+    template: '{{scope_noun}} {{project}} chưa đủ {{permit_status}}; {{cause_label}}
+      là yếu tố có khả năng liên quan tới {{overdue_units}}.'
     required_evidence:
     - slot: permit
       table: dim_project_profile
@@ -287,7 +287,7 @@ semantic_config:
     SALES_PITCH_AUDIT: Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam
       kết với khách giữ chỗ.
   insight_templates:
-    CAUSE_DISTRIBUTION: Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}}
+    CAUSE_DISTRIBUTION: Tại {{scope_noun}} {{scope}}, {{cause_label}} chiếm {{weighted_share}}
       và xuất hiện ở {{unit_share}}.
     PATTERN: Nhóm {{group}} có DOM trung vị {{group_dom}}, so với {{rest_dom}} ở các
       căn còn lại; đây là mối liên hệ đi kèm, chưa phải kết luận về nguyên nhân.
@@ -359,12 +359,23 @@ semantic_config:
     - project
     - zone
     - scope
+    - scope_noun
     - subject
     - group
     - market
     - cause_label
     - permit_status
     - limitation
+    scope_nouns:
+      MARKET: thị trường
+      PROJECT: dự án
+      ZONE: tòa
+      UNIT: căn
+    scope_words:
+    - tòa
+    - toà
+    - dự án
+    - phân khu
     quantity_words:
     - một nửa
     - gấp đôi

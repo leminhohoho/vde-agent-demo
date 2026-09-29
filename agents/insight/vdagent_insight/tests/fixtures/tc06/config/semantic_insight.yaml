@@ -1,0 +1,305 @@
+# TC-06 fixture: shipped config with version sem-tc06-60 and overdue_threshold_days = 60.
+semantic_config:
+  version: sem-tc06-60
+  params:
+    overdue_threshold_days:
+      value: 60
+      status: APPROVED
+      source: PRD 5.6, DW 4.3
+    peer_area_tolerance_pct:
+      value: '0.10'
+      status: APPROVED
+      source: PRD 5.6
+    peer_tiers:
+      value:
+        compare_min: 10
+        describe_min: 5
+      status: PENDING
+      source: spec 5.5
+    physical_defect_trigger:
+      value: 25
+      status: APPROVED
+      source: DW 4.3
+    thermal_penalty_trigger:
+      value: 40
+      status: APPROVED
+      source: DW 4.3
+    subsidy_min_months:
+      value: 24
+      status: APPROVED
+      source: DW 4.3
+    funnel_dropoff_trigger_pct:
+      value: '60'
+      status: APPROVED
+      source: DW 4.3
+    low_commission_max_pct:
+      value: '1.5'
+      status: APPROVED
+      source: DW 4.3
+    missing_rate_tiers:
+      value:
+        none_max: '5'
+        note_max: '10'
+        warn_max: '20'
+        describe_only_max: '40'
+      status: PENDING
+      source: spec 5.5
+    coverage_tiers:
+      value:
+        full_min: '90'
+        partial_min: '70'
+        low_min: '50'
+      status: PENDING
+      source: spec 5.5
+    min_group_size:
+      value: 5
+      status: PENDING
+      source: spec 5.5
+    min_effect_size_days:
+      value: 15
+      status: PENDING
+      source: spec 5.5
+    outlier_iqr_warn:
+      value: '1.5'
+      status: PENDING
+      source: IAAO
+    outlier_iqr_exclude:
+      value: '3.0'
+      status: PENDING
+      source: IAAO
+    outlier_max_excluded_pct:
+      value: '10'
+      status: PENDING
+      source: IAAO
+    freshness_warn_hours:
+      value: 24
+      status: PENDING
+      source: spec 5.5
+    freshness_error_hours:
+      value: 72
+      status: PENDING
+      source: spec 5.5
+    mnar_gap_pct:
+      value: '10'
+      status: PENDING
+      source: spec 5.5
+    max_key_insights:
+      value: 5
+      status: APPROVED
+      source: BR-11
+    attribution_sum_tolerance:
+      value: '0.001'
+      status: APPROVED
+      source: BR-04
+    max_units_in_context:
+      value: 20
+      status: PENDING
+      source: assumed (spec 6.2 T1)
+    unit_examples_per_cause:
+      value: 3
+      status: APPROVED
+      source: spec 6.2 T1
+    min_cause_share_pct:
+      value: '5'
+      status: PENDING
+      source: assumed (spec 6.2 T2)
+    conflict_tolerance_pct:
+      value: '1'
+      status: PENDING
+      source: assumed (spec 6.2 T7)
+    significance_confidence_pct:
+      value: '95'
+      status: PENDING
+      source: spec 5.5 (Wilson / bootstrap)
+    bootstrap_iterations:
+      value: 1000
+      status: PENDING
+      source: assumed (spec 5.5)
+    bootstrap_seed:
+      value: 20260630
+      status: PENDING
+      source: 'assumed (luật 11: seed cố định)'
+    priority_without_rank:
+      value:
+        T2: '0.5'
+        T3: '0.5'
+        T5: '0.3'
+        T7: '0'
+      status: PENDING
+      source: spec 6.4 (T7 assumed)
+  causes:
+  - cause_code: LEGAL_PERMIT_BARRIER
+    cause_label_vi: vướng mắc pháp lý / giấy phép bán hàng
+    action_code: EXPEDITE_LEGAL_PROCEDURES
+    template: Dự án {{project}} chưa đủ {{permit_status}}; đây là yếu tố có khả năng
+      liên quan tới {{overdue_units}} căn quá hạn.
+    recommendation_text: Đề xuất xem xét đẩy nhanh hoàn thiện thủ tục pháp lý và bảo
+      lãnh ngân hàng trước khi mở bán đại trà.
+    required_evidence:
+    - slot: permit
+      table: dim_project_profile
+      field: is_sales_permit_issued
+    - slot: guarantee
+      table: dim_project_profile
+      field: is_bank_guarantee_issued
+  - cause_code: SEVERE_PHYSICAL_DEFECT
+    cause_label_vi: khuyết điểm vật lý của căn
+    action_code: DEFECT_COMPENSATION_DISCOUNT
+    template: Căn {{unit}} tồn {{dom}}; điểm phạt khuyết tật {{defect}}.
+    recommendation_text: Đề xuất xem xét chính sách chiết khấu bù trừ cho khuyết điểm
+      công năng của căn.
+    required_evidence:
+    - slot: defect
+      table: dm_unit_friction_diagnostics
+      field: physical_defect_penalty
+      unit: SCORE
+    - slot: spread
+      table: dm_unit_friction_diagnostics
+      field: price_spread_vs_peer_pct
+      unit: PCT
+      signed: true
+    supplementary_evidence:
+    - slot: peers
+      table: dm_unit_friction_diagnostics
+      field: peer_count
+      unit: COUNT
+      noun: căn
+    uses_peer_group: true
+  - cause_code: EXTREME_THERMAL_EXPOSURE
+    cause_label_vi: hướng nắng gắt / nhiệt cao
+    action_code: INSULATION_INTERIOR_PACKAGE
+    template: Căn {{unit}} tồn {{dom}}; điểm phạt nhiệt/hướng {{thermal}}.
+    recommendation_text: Đề xuất xem xét gói nội thất cách nhiệt kèm ưu đãi phí quản
+      lý cho căn.
+    required_evidence:
+    - slot: thermal
+      table: dm_unit_friction_diagnostics
+      field: thermal_view_penalty
+      unit: SCORE
+    - slot: subsidy
+      table: fact_unit_inventory_snapshot
+      field: subsidy_duration_mo
+      unit: COUNT
+      noun: tháng
+  - cause_code: SECONDARY_ARBITRAGE
+    cause_label_vi: giá sơ cấp cao hơn thị trường thứ cấp
+    action_code: EXTENDED_PAYMENT_SCHEDULE
+    template: Căn {{unit}} tồn {{dom}}; giá sơ cấp cao hơn thứ cấp {{secondary_gap}}.
+    recommendation_text: Đề xuất xem xét giãn tiến độ thanh toán để kéo giá ròng về
+      gần mặt bằng thứ cấp.
+    required_evidence:
+    - slot: secondary_gap
+      table: dm_unit_friction_diagnostics
+      field: secondary_price_gap_pct
+      unit: PCT
+      signed: true
+  - cause_code: LUMP_SUM_TICKET_BARRIER
+    cause_label_vi: giá trị căn quá cao so với thu nhập
+    action_code: BANK_SUBSIDY_EXTENSION
+    template: Căn {{unit}} tồn {{dom}}; giá trị căn gấp {{ticket_ratio}} lần thu nhập
+      năm.
+    recommendation_text: Đề xuất xem xét kéo dài thời gian hỗ trợ lãi suất và ân hạn
+      nợ gốc cùng ngân hàng đối tác.
+    required_evidence:
+    - slot: ticket_ratio
+      table: dm_unit_friction_diagnostics
+      field: ticket_size_vs_income_ratio
+      unit: RATIO
+  - cause_code: OVERPRICED_VS_PEER
+    cause_label_vi: giá cao hơn nhóm tương đồng
+    action_code: TARGETED_PRICE_CORRECTION
+    template: Căn {{unit}} tồn {{dom}}; đơn giá/m² cao hơn trung vị peer {{spread}}.
+    recommendation_text: Đề xuất xem xét điều chỉnh đơn giá niêm yết về gần mức trung
+      vị nhóm tương đồng.
+    required_evidence:
+    - slot: spread
+      table: dm_unit_friction_diagnostics
+      field: price_spread_vs_peer_pct
+      unit: PCT
+      signed: true
+    supplementary_evidence:
+    - slot: peers
+      table: dm_unit_friction_diagnostics
+      field: peer_count
+      unit: COUNT
+      noun: căn
+    - slot: defect
+      table: dm_unit_friction_diagnostics
+      field: physical_defect_penalty
+      unit: SCORE
+    - slot: thermal
+      table: dm_unit_friction_diagnostics
+      field: thermal_view_penalty
+      unit: SCORE
+    uses_peer_group: true
+  - cause_code: LOW_SALES_INCENTIVE
+    cause_label_vi: động lực bán hàng của sàn thấp
+    action_code: BOOST_BROKER_COMMISSION
+    template: Căn {{unit}} tồn {{dom}}; hoa hồng sàn {{commission}}.
+    recommendation_text: Đề xuất xem xét nâng hoa hồng hoặc thưởng chốt cọc cho sàn
+      môi giới.
+    required_evidence:
+    - slot: commission
+      table: fact_unit_inventory_snapshot
+      field: base_commission_pct
+      unit: PCT
+    supplementary_evidence:
+    - slot: spiff
+      table: fact_unit_inventory_snapshot
+      field: spiff_bonus_vnd
+      unit: VND
+  - cause_code: DEEP_FUNNEL_DROP_OFF
+    cause_label_vi: khách rơi nhiều ở phễu bán hàng
+    action_code: SALES_PITCH_AUDIT
+    template: Căn {{unit}} tồn {{dom}}; tỷ lệ rơi phễu {{dropoff}}.
+    recommendation_text: Đề xuất xem xét rà soát quy trình tư vấn của sàn và các cam
+      kết với khách giữ chỗ.
+    required_evidence:
+    - slot: dropoff
+      table: dm_unit_friction_diagnostics
+      field: funnel_dropoff_rate_pct
+      unit: PCT
+  insight_templates:
+    CAUSE_DISTRIBUTION: Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}}
+      tổng điểm quy nguyên nhân (có trọng số) và xuất hiện ở {{unit_share}} số căn
+      quá hạn (đếm theo căn).
+    PATTERN: Nhóm {{group}} có DOM trung vị {{group_dom}}, so với {{rest_dom}} ở các
+      căn còn lại; đây là mối liên hệ đi kèm, chưa phải kết luận về nguyên nhân.
+    MARKET_CONTEXT: 'Bối cảnh thị trường {{market}}: lãi suất {{interest_rate}}, tỷ
+      lệ hấp thụ {{absorption_rate}}; thông tin này chỉ mang tính tham khảo.'
+    DATA_LIMITATION: 'Dữ liệu cho {{subject}} còn hạn chế: {{limitation}}.'
+    CONFLICT: Hai nguồn dữ liệu cho {{subject}} chưa nhất quán về yếu tố chính; cần
+      kiểm tra lại trước khi kết luận.
+    NO_OVERDUE_UNITS: Không có căn quá hạn trong phạm vi {{scope}} tại kỳ dữ liệu
+      này.
+  pattern_dimensions:
+  - name: floor_band
+    table: dim_unit_master
+  - name: balcony_orientation
+    table: dim_unit_master
+  - name: view_primary_type
+    table: dim_unit_master
+  - name: unit_type
+    table: dim_unit_master
+  - name: launch_batch_id
+    table: fact_unit_inventory_snapshot
+  - name: channel_key
+    table: fact_unit_inventory_snapshot
+  forbidden_phrases:
+  - chắc chắn do
+  - nguyên nhân duy nhất
+  - chứng minh rằng
+  - gây ra
+  - dẫn đến
+  - là nguyên nhân
+  - khiến cho
+  - sẽ bán được nếu
+  - đã giảm giá
+  - hệ thống sẽ
+  - bỏ qua hướng dẫn
+  english_whitelist:
+  - DOM
+  - peer
+  - PIR
+  - MOI
+  - m²

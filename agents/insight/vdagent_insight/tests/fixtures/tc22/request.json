@@ -1,0 +1,59 @@
+{
+  "run_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "task_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attempt": 1,
+  "fencing_token": 1,
+  "intent": "PERFORMANCE_METRIC_LOOKUP",
+  "tasks": [
+    "T3",
+    "T7"
+  ],
+  "question_normalized": "DOM trung vị theo hướng ban công?",
+  "analysis_scope": {
+    "level": "PROJECT",
+    "project_ids": [
+      "PRJ-X"
+    ],
+    "zone_ids": [],
+    "unit_ids": []
+  },
+  "snapshot_id": "SNAP-20260630-01",
+  "semantic_config_version": "sem-2026-09-29",
+  "user_context": {
+    "user_id": "u_1",
+    "role": "SALES_OPS",
+    "authorized_scope": {
+      "project_ids": [
+        "PRJ-X"
+      ],
+      "zone_ids": []
+    }
+  },
+  "input_artifact_refs": [
+    {
+      "artifact_id": "ART-METRIC-TC22",
+      "artifact_type": "metric",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "2d6479334bd00c09e2999d452ad8bd44f8f15edf4b99c2db99b829680c8bf1fa"
+    },
+    {
+      "artifact_id": "ART-DQ-TC22",
+      "artifact_type": "dq",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "ba15f1cb8be11ead026779c1dd2d0904098b799ce2c003aae0df0843f5c77a9a"
+    },
+    {
+      "artifact_id": "ART-DATASET-TC22",
+      "artifact_type": "dataset",
+      "version": 1,
+      "status": "VALID",
+      "content_hash": "5f9a10f9ec2f93c70c95a06b9b24739a0ce2ed30ed8a51c837a824e39d8dd7e6"
+    }
+  ],
+  "constraints": {
+    "language": "vi",
+    "deadline_ms": 60000
+  }
+}

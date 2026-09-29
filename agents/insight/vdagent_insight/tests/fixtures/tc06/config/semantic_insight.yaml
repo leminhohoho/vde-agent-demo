@@ -385,6 +385,12 @@ semantic_config:
     - tỷ trọng
     - tỷ suất
     - phần trăm
+    median_slots:
+    - group_dom
+    - rest_dom
+    mean_words:
+    - trung bình
+    - bình quân
     strong_comparison_phrases:
     - cao hơn rõ
     - thấp hơn rõ

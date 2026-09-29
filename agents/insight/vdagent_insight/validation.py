@@ -149,6 +149,16 @@ def _language(item: DraftItem, given: list[InsightCandidate], cfg: SemanticConfi
     return out
 
 
+def _statistic(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
+    """A median slot (`language.median_slots`) must not be called an average."""
+    lang = cfg.language
+    medians = [s.slot for s in item.slots if s.ref.partition(".")[2] in lang.median_slots]
+    words = [w for w in lang.mean_words if _has_phrase(SLOT.sub(" ", item.template), w)]
+    if medians and words:
+        return [Violation("GR-08", "MEDIAN_AS_MEAN", f"{medians} hold a median, not {words}: {item.template!r}")]
+    return []
+
+
 def _length(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
     words = len(SLOT.sub("X", item.template).split())
     if words > cfg.language.max_words:
@@ -166,6 +176,7 @@ def validate_item(
         + _recommendation(item, given, cfg, request)
         + _comparisons(item, given, cfg)
         + _language(item, given, cfg)
+        + _statistic(item, cfg)
         + _length(item, cfg)
     )
 

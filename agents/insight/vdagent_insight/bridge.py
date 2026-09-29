@@ -203,7 +203,7 @@ def render_reply(
     p = env.payload
     cov = p.summary.coverage
     key = [i for i in p.insights if i.materiality == "KEY"]
-    shown = key or p.insights[:3]
+    shown = key or p.insights[:5]
     scope = request.analysis_scope
     ids = scope.unit_ids or scope.zone_ids or scope.project_ids
     if p.summary.narrative_mode == "LLM":
@@ -241,8 +241,7 @@ def render_reply(
             "narrative_mode": p.summary.narrative_mode,
             "coverage": cov.model_dump(mode="json"),
             "insights": [
-                {**c, "rendered_text": _cut(c["rendered_text"], text_max)}
-                for c in (_compact_insight(i) for i in items if i in key)
+                {**c, "rendered_text": _cut(c["rendered_text"], text_max)} for c in (_compact_insight(i) for i in items)
             ],
             "truncated": len(items) < len(shown),
         }

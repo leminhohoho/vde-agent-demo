@@ -1,4 +1,4 @@
-<!-- prompt_version: insight-prompt-1.3.0 -->
+<!-- prompt_version: insight-prompt-1.4.0 -->
 # Sửa câu trả lời
 
 Câu trả lời trước của bạn (khối `<previous_output>`) vi phạm các luật ở trên. Danh sách lỗi nằm trong khối `<violations>`: mỗi lỗi có số thứ tự item, mã luật và mã lỗi.

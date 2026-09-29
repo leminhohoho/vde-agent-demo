@@ -186,6 +186,9 @@ semantic_config:
     quantity_words: ["một nửa", "gấp đôi", "gấp ba", "phần tư", "phần ba", "chục", "trăm", "nghìn", "ngàn", "triệu", "tỷ", "hàng loạt", "đa số", "phần lớn"]
     # Words that contain a quantity word but state no number ("tỷ lệ" is a ratio, not a billion; P5).
     quantity_word_exceptions: ["tỷ lệ", "tỷ trọng", "tỷ suất", "phần trăm"]
+    # Slots holding a median, and the words that would call it an average (P5, live).
+    median_slots: [group_dom, rest_dom]
+    mean_words: ["trung bình", "bình quân"]
     # GR-07: allowed only when every candidate of the item is `significant` (D-25).
     strong_comparison_phrases: ["cao hơn rõ", "thấp hơn rõ", "chậm hơn rõ", "nhanh hơn rõ", "vượt trội", "đáng kể", "khác biệt rõ", "nổi bật"]
     # GR-06: a recommendation is a suggestion needing approval (D-24).

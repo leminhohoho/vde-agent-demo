@@ -219,6 +219,8 @@ class LanguageConfig(_Config):
     label_slots: tuple[str, ...]
     quantity_words: tuple[str, ...]
     quantity_word_exceptions: tuple[str, ...] = ()
+    median_slots: tuple[str, ...] = ()
+    mean_words: tuple[str, ...] = ()
     strong_comparison_phrases: tuple[str, ...]
     imperative_phrases: tuple[str, ...]
     recommendation_prefixes: tuple[str, ...]
@@ -234,6 +236,7 @@ class LanguageConfig(_Config):
     @field_validator(
         "quantity_words",
         "quantity_word_exceptions",
+        "mean_words",
         "strong_comparison_phrases",
         "imperative_phrases",
         "recommendation_prefixes",

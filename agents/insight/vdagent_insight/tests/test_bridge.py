@@ -310,3 +310,11 @@ async def test_an_injection_next_to_a_real_question_does_not_change_the_result(t
     assert "INSIGHT_SECURITY_EVENT" in [e for e, _ in EVENTS]
     a, b = block(clean), block(injected)
     assert a["insights"] == b["insights"] and a["coverage"] == b["coverage"]
+
+
+async def test_without_key_insights_the_reply_lists_and_returns_up_to_five_items(tmp_path: Path) -> None:
+    reply, _ = await ask(tmp_path, "DOM trung bình theo hướng ban công ở Sapphire 1?")
+    data = block(reply)
+    assert data["insights"] and len(data["insights"]) <= 5
+    assert all(i["eligible_for_conclusion"] is False for i in data["insights"])
+    assert "Kết quả:" in reply

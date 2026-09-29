@@ -380,6 +380,11 @@ semantic_config:
     - hàng loạt
     - đa số
     - phần lớn
+    quantity_word_exceptions:
+    - tỷ lệ
+    - tỷ trọng
+    - tỷ suất
+    - phần trăm
     strong_comparison_phrases:
     - cao hơn rõ
     - thấp hơn rõ

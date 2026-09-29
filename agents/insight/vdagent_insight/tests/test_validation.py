@@ -73,6 +73,30 @@ def test_gr01_free_numbers_and_quantity_words_are_e10(template: str) -> None:
     assert "E10" in check(item(template))
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "Tại {{zone}}, {{cause_label}} chiếm tỷ trọng {{weighted_share}}.",  # live P4: "tỷ" (a billion) ≠ "tỷ lệ"
+        "Căn {{unit}} tồn {{dom}}, tỷ lệ rời phễu {{dropoff}}; liên quan tới {{cause_label}}.",
+    ],
+)
+def test_gr01_ratio_words_are_not_quantity_words(template: str) -> None:
+    assert "E10" not in check(item(template))
+
+
+def test_gr01_the_violation_names_the_offending_word() -> None:
+    it = item("Căn {{unit}} có hàng tỷ lượt xem; liên quan tới {{cause_label}}.")
+    (v,) = [v for v in validate_item(it, {CID: C}, CFG, request()) if v.code == "E10"]
+    assert "'tỷ'" in v.detail
+
+
+def test_a_slot_in_a_plain_text_field_is_named_as_such() -> None:
+    """Live P5: the model wrote "… cho căn {{unit}}." in recommendation_text (plain text, never filled)."""
+    rec = "Có thể cân nhắc điều chỉnh chính sách hoa hồng cho căn {{unit}}."
+    violations = validate_item(item(recommendation_text=rec), {CID: C}, CFG, request())
+    assert [(v.code, "recommendation_text" in v.detail) for v in violations] == [("E11", True)]
+
+
 def test_gr01_applies_to_limitation_and_recommendation_texts() -> None:
     assert "E10" in check(item(limitation_text="Chỉ có 3 peer để so sánh."))
 

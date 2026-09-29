@@ -184,6 +184,8 @@ semantic_config:
     label_slots: [unit, project, zone, scope, subject, group, market, cause_label, permit_status, limitation]
     # GR-01: quantity words that state a number without a slot (D-21).
     quantity_words: ["một nửa", "gấp đôi", "gấp ba", "phần tư", "phần ba", "chục", "trăm", "nghìn", "ngàn", "triệu", "tỷ", "hàng loạt", "đa số", "phần lớn"]
+    # Words that contain a quantity word but state no number ("tỷ lệ" is a ratio, not a billion; P5).
+    quantity_word_exceptions: ["tỷ lệ", "tỷ trọng", "tỷ suất", "phần trăm"]
     # GR-07: allowed only when every candidate of the item is `significant` (D-25).
     strong_comparison_phrases: ["cao hơn rõ", "thấp hơn rõ", "chậm hơn rõ", "nhanh hơn rõ", "vượt trội", "đáng kể", "khác biệt rõ", "nổi bật"]
     # GR-06: a recommendation is a suggestion needing approval (D-24).

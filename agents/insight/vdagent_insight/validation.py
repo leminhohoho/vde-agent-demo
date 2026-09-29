@@ -47,6 +47,12 @@ class Violation:
     detail: str
 
 
+def hidden_peer_slots(c: InsightCandidate, cfg: SemanticConfig) -> frozenset[str]:
+    """The peer-number slots a candidate must not state: fewer than `describe_min` peers (D-71)."""
+    peer_cause = c.cause_code is not None and c.cause_code in cfg.allowed_cause_codes and cfg.cause(c.cause_code).uses_peer_group
+    return PEER_SLOTS & set(c.slots) if peer_cause and "GROUP_TOO_SMALL" in c.dq_flags else frozenset()
+
+
 def _has_phrase(text: str, phrase: str) -> bool:
     """Whole-word match on NFC-lowercased text."""
     return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", normalize_phrase(text)) is not None
@@ -60,6 +66,10 @@ def _prose(item: DraftItem) -> list[str]:
 
 def _references(item: DraftItem, candidates: Mapping[str, InsightCandidate], cfg: SemanticConfig) -> list[Violation]:
     out: list[Violation] = []
+    for field in ("limitation_text", "recommendation_text"):
+        text = getattr(item, field)
+        if text and SLOT.search(text):
+            out.append(Violation("GR-03", "E11", f"{field} is plain text, no {{{{slot}}}} is filled there: {text!r}"))
     unknown = [c for c in item.candidate_ids if c not in candidates]
     if unknown:
         out.append(Violation("GR-03", "E11", f"candidates not given to the model: {', '.join(unknown)}"))
@@ -80,8 +90,13 @@ def _numbers_and_phrases(item: DraftItem, cfg: SemanticConfig) -> list[Violation
     out: list[Violation] = []
     lang = cfg.language
     for text in _prose(item):
-        if DIGIT.search(text) or any(_has_phrase(text, w) for w in lang.quantity_words):
-            out.append(Violation("GR-01", "E10", f"number outside a slot: {text!r}"))
+        plain = normalize_phrase(text)
+        for exception in lang.quantity_word_exceptions:  # "tỷ lệ" states no number
+            plain = re.sub(rf"(?<!\w){re.escape(exception)}(?!\w)", " ", plain)
+        found = DIGIT.findall(plain) + [w for w in lang.quantity_words if _has_phrase(plain, w)]
+        if found:
+            words = ", ".join(repr(w) for w in dict.fromkeys(found))
+            out.append(Violation("GR-01", "E10", f"number outside a slot ({words}): {text!r}"))
         if URL.search(text) or any(p in normalize_phrase(text) for p in cfg.forbidden_phrases):
             out.append(Violation("GR-02", "E12", f"forbidden language: {text!r}"))
         if re.search(lang.unit_code_pattern, text):
@@ -111,14 +126,7 @@ def _comparisons(item: DraftItem, given: list[InsightCandidate], cfg: SemanticCo
     strong = [p for p in cfg.language.strong_comparison_phrases if any(_has_phrase(t, p) for t in _prose(item))]
     if strong and not all(c.significant for c in given):
         out.append(Violation("GR-07", "STRONG_CLAIM_NOT_SIGNIFICANT", f"{strong} on a non-significant candidate"))
-    hidden = {
-        c.candidate_id
-        for c in given
-        if "GROUP_TOO_SMALL" in c.dq_flags
-        and c.cause_code in cfg.allowed_cause_codes
-        and c.cause_code is not None
-        and cfg.cause(c.cause_code).uses_peer_group
-    }
+    hidden = {c.candidate_id for c in given if hidden_peer_slots(c, cfg)}
     if any(s.ref.partition(".")[0] in hidden and s.ref.partition(".")[2] in PEER_SLOTS for s in item.slots):
         out.append(Violation("GR-07", "PEER_HIDDEN", "peer numbers with fewer than describe_min peers (D-71)"))
     return out
@@ -129,7 +137,7 @@ def _language(item: DraftItem, given: list[InsightCandidate], cfg: SemanticConfi
     whitelist = {normalize_phrase(w) for w in cfg.english_whitelist}
     stopwords = set(cfg.language.english_stopwords) - whitelist
     for text in _prose(item):
-        words = {normalize_phrase(w) for w in WORD.findall(text)}
+        words = {normalize_phrase(w) for w in WORD.findall(SLOT.sub(" ", text))}
         english = sorted(words & stopwords)
         if not VI_DIACRITIC.search(text) or english:
             out.append(Violation("GR-08", "LANGUAGE_MISMATCH", f"not Vietnamese ({english}): {text!r}"))

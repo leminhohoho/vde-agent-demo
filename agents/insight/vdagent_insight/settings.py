@@ -218,6 +218,7 @@ class LanguageConfig(_Config):
 
     label_slots: tuple[str, ...]
     quantity_words: tuple[str, ...]
+    quantity_word_exceptions: tuple[str, ...] = ()
     strong_comparison_phrases: tuple[str, ...]
     imperative_phrases: tuple[str, ...]
     recommendation_prefixes: tuple[str, ...]
@@ -231,7 +232,12 @@ class LanguageConfig(_Config):
     limitation_messages: dict[str, str]
 
     @field_validator(
-        "quantity_words", "strong_comparison_phrases", "imperative_phrases", "recommendation_prefixes", "english_stopwords"
+        "quantity_words",
+        "quantity_word_exceptions",
+        "strong_comparison_phrases",
+        "imperative_phrases",
+        "recommendation_prefixes",
+        "english_stopwords",
     )
     @classmethod
     def _normalised(cls, phrases: tuple[str, ...]) -> tuple[str, ...]:

@@ -196,7 +196,12 @@ def render_reply(result: TaskResult, request: InsightTaskRequest, *, compat: boo
     shown = key or p.insights[:3]
     scope = request.analysis_scope
     ids = scope.unit_ids or scope.zone_ids or scope.project_ids
-    mode = "LLM" if p.summary.narrative_mode == "LLM" else "mẫu cố định (TEMPLATE)"
+    if p.summary.narrative_mode == "LLM":
+        mode = f"LLM ({env.producer.model_id})"
+    elif env.producer.model_id:  # some items fell back to a template after validation (spec 8.2)
+        mode = f"LLM ({env.producer.model_id}), một phần dùng mẫu cố định (TEMPLATE)"
+    else:
+        mode = "mẫu cố định (TEMPLATE)"
     cost = "không gọi LLM" if result.task_cost_usd is None else f"${result.task_cost_usd}"
     head = [
         f"**Insight {env.status}** · artifact `{env.artifact_id}`" + (" · kết quả đã có, dùng lại" if result.reused else ""),

@@ -440,3 +440,18 @@ async def test_a_zone_question_leads_with_the_zone_cause_distribution(tmp_path: 
     first = env.payload.insights[0]
     assert (first.insight_type, first.level, first.materiality) == ("CAUSE_DISTRIBUTION", "ZONE", "KEY")
     assert env.payload.summary.headline_insight_ids[0] == first.insight_id
+
+
+async def test_the_model_id_is_kept_when_some_items_are_templated(tmp_path: Path) -> None:
+    two = {**draft("c1"), "selected": [*draft("c1")["selected"], *draft("c2", "Căn {{unit}} cao hơn peer 20%.")["selected"]]}
+    data = dataset(
+        [unit(11, unit_code="SAPPHIRE1-16.231"), unit(12, unit_code="SAPPHIRE1-16.232")],
+        [inventory(11, 145), inventory(12, 150)], [diagnostic(11, 145), diagnostic(12, 150)],
+        [cause(11, "OVERPRICED_VS_PEER"), cause(12, "OVERPRICED_VS_PEER")],
+    )  # fmt: skip
+    client = fake(FakeReply(two, usage("MAIN")), FakeReply(two, usage("REPAIR")))
+    request, reader = task(data, analysis_scope=scope("UNIT", unit_ids=["U011", "U012"]))
+    result, _ = await run(tmp_path, request, reader, providers=LlmProviders(client))
+    env = result.envelope
+    assert env is not None and env.payload.summary.narrative_mode == "TEMPLATE"
+    assert env.producer.model_id == "gemini-3.5-flash-lite"

@@ -406,7 +406,7 @@ async def run_task(request: InsightTaskRequest, deps: InsightDeps) -> TaskResult
         producer=Producer(
             agent=f"{AGENT}@{AGENT_VERSION}",
             prompt_version=deps.llm.prompt_version,
-            model_id=usages[-1].model_id if usages and payload.summary.narrative_mode == "LLM" else None,
+            model_id=usages[-1].model_id if usages and any(i.source == "LLM" for i in n.narration.items) else None,
             llm_usage=list(usages),
             replay=_replay(n, deps, as_of),
         ),

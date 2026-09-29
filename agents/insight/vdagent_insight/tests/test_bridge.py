@@ -260,3 +260,15 @@ def test_compact_keeps_questions_and_artifact_ids_deterministically() -> None:
 async def test_an_empty_message_gets_the_guidance(tmp_path: Path, text: str) -> None:
     reply, _ = await ask(tmp_path, text)
     assert "E01" in reply
+
+
+async def test_a_partly_templated_llm_answer_is_labelled_as_such(tmp_path: Path) -> None:
+    reply, _ = await ask(tmp_path, "Vì sao tòa Sapphire 1 có nhiều căn bán chậm?")
+    rt = runtime(tmp_path)
+    env = await rt.store.get(block(reply)["artifact_id"])
+    assert env is not None and "Diễn giải: mẫu cố định (TEMPLATE)" in reply
+    from .test_llm_steps import usage as llm_usage
+
+    mixed = env.model_copy(update={"producer": env.producer.model_copy(update={"llm_usage": [llm_usage()], "model_id": "m"})})
+    text = render_reply(TaskResult("PARTIAL", mixed, task_cost_usd=Decimal("0.001")), request_stub(), compat=False)
+    assert "Diễn giải: LLM (m), một phần dùng mẫu cố định (TEMPLATE)" in text

@@ -233,3 +233,4 @@ semantic_config:
       ACTION_CODE_MISMATCH: "khuyến nghị trong bảng chẩn đoán khác với danh mục khuyến nghị"
       SOURCE_MISMATCH: "hai nguồn dữ liệu cùng kỳ cho số liệu khác nhau"
       LEGAL_FLAGS_MISMATCH: "dự án đã đủ giấy tờ pháp lý nhưng vẫn được gắn yếu tố pháp lý"
+      DEADLINE_EXCEEDED: "hết thời gian xử lý, phần diễn giải dùng mẫu cố định"

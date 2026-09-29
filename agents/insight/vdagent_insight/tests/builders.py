@@ -17,6 +17,7 @@ from ..contracts import (
     DiagnosticRow,
     DqFieldResult,
     DqPayload,
+    InputArtifact,
     InsightCandidate,
     InsightTaskRequest,
     InventoryRow,
@@ -283,3 +284,68 @@ def macro(
 
 def market(rows: Sequence[MacroRow]) -> MarketContextPayload:
     return MarketContextPayload(source_refs=[f"fact_market_macro_monthly@{SNAP}"], fact_market_macro_monthly=list(rows))
+
+
+class DictReader:
+    """An ArtifactReader over artifacts held in memory."""
+
+    def __init__(self, artifacts: Sequence[InputArtifact]) -> None:
+        self._by_id = {a.artifact_id: a for a in artifacts}
+
+    async def read(self, artifact_id: str) -> InputArtifact:
+        from ..artifacts import ArtifactNotFound
+
+        try:
+            return self._by_id[artifact_id]
+        except KeyError:
+            raise ArtifactNotFound(artifact_id) from None
+
+
+def input_artifact(
+    artifact_id: str, artifact_type: str, payload: Any, snapshot_id: str = SNAP, version: str | None = None
+) -> InputArtifact:
+    from ..artifacts import content_hash
+
+    data = payload.model_dump(mode="json") if hasattr(payload, "model_dump") else payload
+    return InputArtifact.model_validate(
+        {
+            "artifact_id": artifact_id,
+            "artifact_type": artifact_type,
+            "version": 1,
+            "status": "VALID",
+            "snapshot_id": snapshot_id,
+            "semantic_config_version": version or semantic().version,
+            "content_hash": content_hash(data),
+            "payload": data,
+        }
+    )
+
+
+def task(
+    data: DatasetPayload,
+    dq_payload: DqPayload | None = None,
+    market_payload: MarketContextPayload | None = None,
+    tasks: Sequence[str] = ("T1", "T6", "T7"),
+    analysis_scope: AnalysisScope | None = None,
+    **request_kw: Any,
+) -> tuple[InsightTaskRequest, DictReader]:
+    """A request and the reader of its artifacts (metric, dq, dataset[, market_context])."""
+    arts = [
+        input_artifact("ART-METRIC", "metric", {"metrics": []}),
+        input_artifact("ART-DQ", "dq", dq_payload or dq()),
+        input_artifact("ART-DATASET", "dataset", data),
+    ]
+    if market_payload is not None:
+        arts.append(input_artifact("ART-MARKET", "market_context", market_payload))
+    refs = [
+        {
+            "artifact_id": a.artifact_id,
+            "artifact_type": a.artifact_type,
+            "version": 1,
+            "status": "VALID",
+            "content_hash": a.content_hash,
+        }
+        for a in arts
+    ]
+    req = request(tasks, analysis_scope, input_artifact_refs=refs, **request_kw)
+    return req, DictReader(arts)

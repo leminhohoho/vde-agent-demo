@@ -134,3 +134,15 @@ def test_recommendation_comes_from_the_config_only_with_an_action() -> None:
     )
     (no_t6,) = t1_candidates(ctx2).candidates
     assert recommendation_text(no_t6, ctx2.cfg) is None
+
+
+def test_a_unit_word_repeated_after_a_slot_is_written_once() -> None:
+    """Seen live: the model wrote "{{peers}} căn" while the value already reads "12 căn"."""
+    ctx, c = overpriced()
+    cid = c.candidate_id
+    refs = {"unit": f"{cid}.unit", "days": f"{cid}.dom", "peers": f"{cid}.peers", "spread": f"{cid}.spread"}
+    claim = bind_claim(
+        "{{unit}} tồn {{days}} ngày, so với {{peers}} căn tương đồng giá cao hơn {{spread}}.", refs, {cid: c}, ctx.cfg, ctx.view
+    )
+    assert claim.rendered_text.count("ngày") == 1 and "căn căn" not in claim.rendered_text
+    assert " căn tương đồng" in claim.rendered_text and "ngày, so" in claim.rendered_text

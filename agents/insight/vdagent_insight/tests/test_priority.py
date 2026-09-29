@@ -48,3 +48,14 @@ def test_nothing_is_cut_under_the_budget() -> None:
     cands = [candidate("C-1", "T1", "0.9"), candidate("C-2", "T7", "0")]
     kept, rejected = select_for_context(cands, 40)
     assert [c.candidate_id for c in kept] == ["C-1", "C-2"] and rejected == []
+
+
+def test_in_a_zone_or_project_scope_candidates_of_that_level_come_first() -> None:
+    unit = candidate("C-T1-U001", "T1", "0.9")
+    zone = candidate("C-T2-Z", "T2", "0.5").model_copy(update={"level": "ZONE"})
+    kept, rejected = select_for_context([unit, zone], 1, scope_level="ZONE")
+    assert [c.candidate_id for c in kept] == ["C-T2-Z"] and [r.candidate_id for r in rejected] == ["C-T1-U001"]
+    kept, _ = select_for_context([unit, zone], 2, scope_level="ZONE")
+    assert [c.candidate_id for c in kept] == ["C-T2-Z", "C-T1-U001"]
+    kept, _ = select_for_context([unit, zone], 1)  # a unit scope: priority only
+    assert [c.candidate_id for c in kept] == ["C-T1-U001"]

@@ -85,6 +85,7 @@ async def run_llm_steps(
         max_candidates=limits.max_candidates_in_context,
         max_input_tokens=limits.max_input_tokens,
         counter=providers.counter,
+        scope_level=ctx.request.analysis_scope.level,
     )
     by_id = {c.candidate_id: c for c in pf.kept}
     aliases = candidate_aliases(pf.kept)

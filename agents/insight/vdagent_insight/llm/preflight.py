@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..candidates.priority import CONTEXT_BUDGET, select_for_context
-from ..contracts import InsightCandidate, RejectedCandidate
+from ..contracts import InsightCandidate, Level, RejectedCandidate
 from .base import TokenCounter
 
 
@@ -48,8 +48,9 @@ async def preflight(
     max_candidates: int,
     max_input_tokens: int,
     counter: TokenCounter | None,
+    scope_level: Level = "UNIT",
 ) -> Preflight:
-    kept, rejected = select_for_context(candidates, max_candidates)
+    kept, rejected = select_for_context(candidates, max_candidates, scope_level=scope_level)
     tokens, estimated = await _count(counter, system, render_user(kept))
     while tokens > max_input_tokens:
         droppable = [c for c in kept if c.task != "T7"]

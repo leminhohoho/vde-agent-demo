@@ -1,45 +1,49 @@
 # insight agent
 
-Interprets results — trends, anomalies, drivers — each finding backed by a dataset id; may ask data or compare.
+Insight Agent v2 ([docs/insight_agent_spec.md](../../docs/insight_agent_spec.md)): explains why units,
+towers or projects sell slowly — root causes per unit, cause distribution, patterns, market context,
+data limitations — from a frozen data-pack snapshot. Every number in an answer comes from the data
+(the LLM only writes `{{slot}}` templates); every insight carries evidence and lineage.
 
-A Backend plugin (see [`agents/_template`](../_template/README.md) and the `vdagent_sdk` docstring):
-`vdagent_insight/__init__.py` exports `setup(api, opts)`, which registers the agent. The brain is a
-LangChain 1.x agent (`create_agent`) with its own long-term memory:
+A Backend plugin: `vdagent_insight/__init__.py` exports `setup(api, opts)`, which reads the plugin's
+`.env` (runtime.py) and registers `insight`. One turn = one deterministic pipeline run (agent.py,
+steps 0–10) with at most two LLM calls (Gemini, OpenAI fallback), no tool calling, no LangChain.
 
-- `agent.py`: builds the agent per turn with two middlewares; `tools.py`: MCP tools (from
-  `mcp_client.py`) as LangChain tools, plus `send_to_agent`.
-- `bridge.py` (`CtxBridge`): maps LangChain's loop onto the turn contract (emits steps and results,
-  routes `send_to_agent` through `ctx.call_agent`, enforces the step budget).
-- `memory.py` (`MemoryMiddleware`): before the turn, embeds the request and recalls the nearest
-  earlier findings for this user from `ctx.memory` into the system prompt; after the answer,
-  extracts at most 3 durable findings (`prompts/extract.md`), skips near-duplicates (cosine
-  distance < 0.1) and saves the rest with their embeddings. Memory failures never fail a turn.
-
-Prompts: role `prompts/system.md`, summariser `prompts/compact.md`, memory extraction
-`prompts/extract.md`.
-
-MCP tools granted by the Backend (`backend/vdagent_backend/mcp/tools.py`): `query_datasets`, `describe_dataset`, `get_dataset_rows`;
-plus `send_to_agent` to reach the other agents.
+- `bridge.py`: the inbound message is a JSON `InsightTaskRequest` (bare or in a ```json block), or —
+  compat mode until the Orchestrator sends JSON (D-10) — free text with a unit code, tower or project
+  name, turned into a request by fixed rules (`config/bridge.yaml`). The reply is a Vietnamese
+  summary, the `artifact_id` and a compact JSON block of the KEY insights (≤ 6 000 chars).
+- `store.py`: artifacts, idempotency keys and LLM usage in `var/insight_artifacts.db`.
+- `memory.py` (`CtxMemory`): insight references per conversation in `ctx.memory`, never numbers.
 
 ## Run
 
-The Backend loads it at startup when `vdagent_insight` is listed under `plugins:` in
-`backend/config.yaml` (it is by default): `make backend` from the repo root. There is no separate
-process.
+`make backend` (or `uv run uvicorn vdagent_backend.app:app --port 8000`) loads it with the other
+plugins. Without the Backend:
 
-Configure it in `agents/insight/.env` (gitignored). The plugin reads the file itself with
-`dotenv_values()`; its values win over the Backend's process environment. A missing required
-variable makes the plugin fail to load: the Backend logs `plugin vdagent_insight failed: …` and starts
-without this agent.
+```
+uv run python agents/insight/scripts/ask.py "Vì sao tòa Sapphire 1 có nhiều căn bán chậm?"
+uv run python agents/insight/scripts/ask.py --no-llm "Vì sao căn SAPPHIRE1-16.231 bán chậm?"
+```
+
+Configure it in `agents/insight/.env` (gitignored; see `.env.example`). The plugin reads the file
+itself with `dotenv_values()`; its values win over the Backend's process environment.
 
 | Variable | |
 |---|---|
-| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MODEL` | Required. OpenAI-compatible endpoint with tool calling. |
-| `LLM_TIMEOUT_S` | Per LLM call, default 120. |
-| `EMBED_MODEL` | Embedding model for memory on the same endpoint, default `openai/text-embedding-3-small`. |
+| `GEMINI_API_KEY`, `OPENAI_API_KEY` | LLM keys (Gemini primary, OpenAI fallback). None → TEMPLATE mode. |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint. |
+| `INSIGHT_FORCE_PROVIDER` | `gemini` or `openai`: one provider, no fallback. |
+| `INSIGHT_LLM` | `off`: TEMPLATE mode even with keys. |
+| `INSIGHT_ARTIFACT_SOURCE`, `INSIGHT_EXPORT_DIR` | `export` (data pack in `<repo>/export`, default when present) or `fixtures`. |
+| `INSIGHT_STORE_PATH` | SQLite store, default `<repo>/var/insight_artifacts.db`. |
+| `INSIGHT_AS_OF` | Task clock for freshness: `snapshot` (default), `now`, or an ISO datetime. |
+
+Model ids, limits and prices: `config/llm.yaml`. Thresholds and catalogues: `config/semantic_insight.yaml`.
 
 ## Test
 
 ```
-uv run pytest agents/insight
+uv run pytest agents/insight                      # unit + TC tests (+ data-pack golden if export/ exists)
+INSIGHT_LIVE=1 uv run pytest agents/insight -m live -s   # real providers, a few cents
 ```

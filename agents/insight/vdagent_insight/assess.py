@@ -1,7 +1,8 @@
 """Confidence, KEY/SUPPORTING, status and the payload (pipeline step 9, spec §5.2, §4.2, §4.4). Pure.
 
 The LLM never assigns any of this. From the narrated items (narrate.py) and their candidates:
-- one `Insight` per item, ordered LEGAL_PERMIT_BARRIER first (BR-06), then by priority, then id;
+- one `Insight` per item, ordered LEGAL_PERMIT_BARRIER first (BR-06), then the level of a
+  ZONE/PROJECT scope (D-78), then by priority, then id;
   ids `INS-001`…, evidence ids `EV-<insight>-<n>`;
 - merged candidates (D-27): `candidate_id` = the first, the others as `candidate:<id>` in
   `lineage.calculation_refs`; evidence and lineage are unions, confidence the weakest, the cause
@@ -24,6 +25,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from .candidates.common import CANDIDATES_ARTIFACT, CandidateContext
+from .candidates.priority import scope_rank
 from .contracts import (
     ArtifactStatus,
     ChartHint,
@@ -34,6 +36,7 @@ from .contracts import (
     Insight,
     InsightCandidate,
     InsightPayload,
+    Level,
     Limitation,
     Lineage,
     Recommendation,
@@ -98,10 +101,11 @@ def _confidence(cands: list[InsightCandidate]) -> Confidence:
     return Confidence(level=level, reasons=reasons + flags)
 
 
-def _order(item: NarratedItem, by_id: dict[str, InsightCandidate]) -> tuple[int, object, str]:
+def _order(item: NarratedItem, by_id: dict[str, InsightCandidate], scope_level: Level) -> tuple[int, int, object, str]:
     cands = [by_id[c] for c in item.candidate_ids]
     legal = any(c.cause_code == LEGAL and c.level == "PROJECT" for c in cands)
-    return (0 if legal else 1, -max(c.priority for c in cands), item.candidate_ids[0])
+    fit = min(scope_rank(c, scope_level) for c in cands)
+    return (0 if legal else 1, fit, -max(c.priority for c in cands), item.candidate_ids[0])
 
 
 def _is_keyable(ins: Insight, cands: list[InsightCandidate]) -> bool:
@@ -219,7 +223,7 @@ def assess(
     show_recommendation: bool = True,
 ) -> Assessment:
     by_id = {c.candidate_id: c for c in candidates}
-    items = sorted(narration.items, key=lambda i: _order(i, by_id))
+    items = sorted(narration.items, key=lambda i: _order(i, by_id, ctx.request.analysis_scope.level))
     insights = [_insight(n, item, by_id, ctx, show_recommendation) for n, item in enumerate(items, start=1)]
 
     max_key = ctx.request.constraints.max_key_insights or ctx.cfg.params.max_key_insights

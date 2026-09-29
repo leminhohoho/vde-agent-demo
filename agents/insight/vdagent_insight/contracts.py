@@ -289,6 +289,19 @@ class ReadArtifactRef(Contract):
     content_hash: Sha256Hex
 
 
+class ReplayInfo(Contract):
+    """What a replay of the run needs (spec 9.4, D-53)."""
+
+    prompt_sha256: str | None
+    """SHA-256 of system + user prompt of [LLM-1]; None when no LLM was called."""
+    raw_outputs: list[str] = []
+    """The model outputs as returned (each cut at 20 000 chars)."""
+    params: dict[str, str] = {}
+    """LLM call parameters (models, reasoning, limits)."""
+    as_of: str
+    """The task clock used for freshness."""
+
+
 class Producer(Contract):
     agent: str
     """`insight_agent@<agent_version>`."""
@@ -296,6 +309,7 @@ class Producer(Contract):
     model_id: str | None
     """None when no LLM answered (TEMPLATE only)."""
     llm_usage: list[LlmUsage] = []
+    replay: ReplayInfo | None = None
 
 
 class ArtifactEnvelope(Contract):

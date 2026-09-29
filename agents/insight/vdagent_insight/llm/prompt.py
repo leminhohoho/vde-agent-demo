@@ -26,7 +26,7 @@ from typing import Any
 
 from ..contracts import InsightCandidate, InsightTaskRequest, LlmInsightDraft, MemoryContext
 from ..settings import LlmConfig, SemanticConfig
-from ..validation import Violation
+from ..validation import Violation, hidden_peer_slots
 from .schema import provider_schema
 
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
@@ -78,14 +78,16 @@ def _label_slots(c: InsightCandidate, cfg: SemanticConfig) -> list[str]:
 
 
 def _candidate(alias: str, c: InsightCandidate, cfg: SemanticConfig) -> dict[str, Any]:
+    hidden = hidden_peer_slots(c, cfg)  # never offered, so never written (PEER_HIDDEN, D-71)
+    slots = [s for s in c.slots if s not in hidden]
     return {
         "id": alias,
         "type": c.insight_type,
         "level": c.level,
         "subject": c.subject.label,
         "cause_code": c.cause_code,
-        "slots": {name: b.display for name, b in c.slots.items()},
-        "refs": [f"{alias}.{s}" for s in [*c.slots, *_label_slots(c, cfg)]],
+        "slots": {name: c.slots[name].display for name in slots},
+        "refs": [f"{alias}.{s}" for s in [*slots, *_label_slots(c, cfg)]],
         "flags": c.dq_flags,
         "significant": c.significant,
         "confidence": c.confidence,

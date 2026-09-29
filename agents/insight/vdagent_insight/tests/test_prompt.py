@@ -86,3 +86,18 @@ def test_aliases_map_back_to_real_ids_and_unknown_ones_stay_unknown() -> None:
     assert item.candidate_ids == [cs[0].candidate_id, "c9"]
     assert [s.ref for s in item.slots] == [f"{cs[0].candidate_id}.unit", "c9.dom"]
     assert real.skipped[0].candidate_id == cs[0].candidate_id
+
+
+def test_slot_names_written_with_braces_are_normalised() -> None:
+    _, cs = cands()
+    draft = LlmInsightDraft.model_validate(
+        {
+            "selected": [{"candidate_ids": ["c1"], "template": "{{unit}}", "slots": [{"slot": "{{ unit }}", "ref": "c1.unit"}]}],
+            "skipped": [],
+        }
+    )
+    assert resolve_aliases(draft, candidate_aliases(cs)).selected[0].slots[0].slot == "unit"
+
+
+def test_the_system_prompt_shows_a_literal_slot_entry() -> None:
+    assert '{"slot":"dom","ref":"c1.dom"}' in system_prompt(semantic(), llm())

@@ -99,7 +99,8 @@ def _candidates_json(candidates: list[InsightCandidate], cfg: SemanticConfig) ->
 
 
 def resolve_aliases(draft: LlmInsightDraft, aliases: dict[str, str]) -> LlmInsightDraft:
-    """Map `c1`… back to the real ids; unknown aliases stay as written (the validator flags them)."""
+    """Map `c1`… back to the real ids; unknown aliases stay as written (the validator flags them).
+    Slot names written as `{{name}}` are normalised to `name` (a formatting slip seen live)."""
 
     def real(candidate_id: str) -> str:
         return aliases.get(candidate_id, candidate_id)
@@ -113,6 +114,7 @@ def resolve_aliases(draft: LlmInsightDraft, aliases: dict[str, str]) -> LlmInsig
         item["candidate_ids"] = [real(c) for c in item["candidate_ids"]]
         for s in item["slots"]:
             s["ref"] = ref(s["ref"])
+            s["slot"] = s["slot"].strip().removeprefix("{{").removesuffix("}}").strip()
     for s in data["skipped"]:
         s["candidate_id"] = real(s["candidate_id"])
     return LlmInsightDraft.model_validate(data)

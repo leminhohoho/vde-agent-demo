@@ -94,7 +94,6 @@ def _candidate(alias: str, c: InsightCandidate, cfg: SemanticConfig) -> dict[str
         "flags": c.dq_flags,
         "significant": c.significant,
         "confidence": c.confidence,
-        "action": c.action_code is not None,
     }
 
 

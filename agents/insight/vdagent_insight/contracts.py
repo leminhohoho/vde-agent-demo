@@ -424,9 +424,9 @@ class DraftItem(Contract):
     template: str = Field(max_length=400)
     """Sentence with `{{slot}}` placeholders."""
     slots: list[SlotRef]
-    # TODO(P2, GR-01/GR-03 in validation.py): every `{{slot}}` of `template` has a SlotRef and vice
-    # versa, and each ref names a candidate/slot given to the model. Checked per item by the
-    # validator, not here, so one bad item falls back to TEMPLATE instead of failing the whole draft.
+    # Every `{{slot}}` of `template` has a SlotRef and vice versa, and each ref names a candidate/slot
+    # given to the model: checked per item by validation.py (GR-01/GR-03), not here, so one bad item
+    # falls back to TEMPLATE instead of failing the whole draft.
     limitation_text: str | None = Field(default=None, max_length=300)
     recommendation_text: str | None = Field(default=None, max_length=300)
 
@@ -533,9 +533,9 @@ class DiagnosticRow(Contract):
     primary_cause_code: str
     recommended_action: str
     is_peer_sample_constrained: bool
-    """TODO(data-agent-contract): not a column of any DW v3.1.0 table (docs/OPEN_QUESTIONS.md Q8a)."""
+    """Column of the data pack's mart (D-03), not listed in DW v3.1.0."""
     peer_count: int
-    """TODO(data-agent-contract): not a column of any DW v3.1.0 table (docs/OPEN_QUESTIONS.md Q8a)."""
+    """Column of the data pack's mart (D-03), not listed in DW v3.1.0."""
 
 
 class CauseRow(Contract):

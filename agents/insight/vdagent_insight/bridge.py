@@ -162,7 +162,7 @@ def guidance(catalog: Catalog | None, reason: str) -> str:
         "- một căn theo mã: “Vì sao căn SAPPHIRE1-16.231 bán chậm?”"
         + (f" (mã khác trong dữ liệu, vd {example})" if example != "SAPPHIRE1-16.231" else ""),
         "- một tòa: “Vì sao tòa The Sapphire 1 có nhiều căn bán chậm?”",
-        "- một dự án: “Thống kê DOM trung bình theo hướng ban công của dự án Vinhomes Ocean Park”",
+        "- một dự án: “Thống kê DOM trung vị theo hướng ban công của dự án Vinhomes Ocean Park”",
     ]
     if zones:
         lines += [f"Tòa có trong dữ liệu: {zones}.", f"Dự án: {projects}."]

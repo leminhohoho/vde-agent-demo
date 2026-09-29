@@ -5,7 +5,7 @@
 # `prompt_version` must be bumped whenever prompts/system.md or prompts/repair.md changes (luật 12).
 
 insight_llm_config:
-  version: "2026-09-29b"
+  version: "2026-09-29c"
   prompt_version: "insight-prompt-1.4.0"  # prompts/*.md carry the same value
   primary:
     provider: gemini
@@ -35,8 +35,8 @@ insight_llm_config:
     max_refs_per_conversation: 20
     conversation_ttl_days: 30
     recent_subject_boost: "0.1"
-    job_timeout_s: 5               # extract/compact jobs, after the answer is emitted (OPEN_QUESTIONS Q4)
-    async_jobs: [extract_user_pref, compact_topics]   # call_type = MEMORY
+    job_timeout_s: 5               # memory load / save_refs; over it → skipped (E18)
+    async_jobs: []                 # D-40/D-42: no LLM MEMORY job; TOPIC_SUMMARY is deterministic
   budget:
     daily_usd: "5.0"
     run_cost_alert_multiplier: 3   # alert when a run costs > 3 × the 7-day median

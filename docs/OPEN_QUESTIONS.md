@@ -20,6 +20,7 @@
 | Q8f | `InsightRef`, `AuthorizedScope` chưa định nghĩa. | `InsightRef` = payload INSIGHT_REF (9.5); `AuthorizedScope` = `user_context.authorized_scope` (3.3). | CHỐT |
 | Q8g | Mart chỉ chứa căn AVAILABLE nên BR-01 không kiểm được từ mart. | Kiểm AVAILABLE + DOM > ngưỡng từ `fact_unit_inventory_snapshot` trong dataset artifact. | CHỐT |
 | Q9 | `docs/PRD_VDAgent.md` không có trong repo. | Không dùng. | MỞ |
+| Q10 | `LlmInsightDraft.selected[].slot_map`: dạng dict hay list? | Dùng `slots: list[SlotRef]` (`slot`, `ref = "<candidate_id>.<slot>"`); Pydantic kiểm `ref` có đúng một dấu chấm, hai vế không rỗng, và `slot` không trùng trong một item. Khớp `{{slot}}` trong template ↔ `slots` thuộc GR-01/GR-03 (P2, validator theo item). Lý do: strict JSON schema của structured output OpenAI không chấp nhận object có `additionalProperties` động; Gemini responseSchema cũng xử lý kém kiểu map. Đổi ngay ở Phase 0 vì chưa có code nào phụ thuộc contract này. Ảnh hưởng: spec 6.5 (`LlmInsightDraft`) cần cập nhật; claim_binder ở P2 đọc `slots`. | CHỐT (spec: cần cập nhật) |
 
 ## Giả định đặt trong Phase 0
 

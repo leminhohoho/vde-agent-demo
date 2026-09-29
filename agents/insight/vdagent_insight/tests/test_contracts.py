@@ -235,9 +235,50 @@ def test_candidate_requires_decimal_priority_and_known_task() -> None:
 
 
 def draft_item(**overrides: Any) -> dict[str, Any]:
-    data: dict[str, Any] = {"candidate_ids": ["C1"], "template": "Căn {{unit}} tồn {{dom}}.", "slot_map": {"dom": "C1.dom"}}
+    data: dict[str, Any] = {
+        "candidate_ids": ["C1"],
+        "template": "Căn {{unit}} tồn {{dom}}.",
+        "slots": [{"slot": "unit", "ref": "C1.unit"}, {"slot": "dom", "ref": "C1.dom"}],
+    }
     data.update(overrides)
     return data
+
+
+def test_llm_draft_slots_parse_as_an_ordered_list_of_slot_refs() -> None:
+    draft = LlmInsightDraft.model_validate({"selected": [draft_item()], "skipped": []})
+    assert [(s.slot, s.ref) for s in draft.selected[0].slots] == [("unit", "C1.unit"), ("dom", "C1.dom")]
+
+
+@pytest.mark.parametrize("ref", ["C1dom", "C1.dom.extra", ".dom", "C1.", "", "."])
+def test_slot_ref_must_be_candidate_id_dot_slot(ref: str) -> None:
+    with pytest.raises(ValidationError, match="ref"):
+        LlmInsightDraft.model_validate({"selected": [draft_item(slots=[{"slot": "dom", "ref": ref}])], "skipped": []})
+
+
+def test_a_slot_may_appear_only_once_per_item() -> None:
+    slots = [{"slot": "dom", "ref": "C1.dom"}, {"slot": "dom", "ref": "C2.dom"}]
+    with pytest.raises(ValidationError, match="dom"):
+        LlmInsightDraft.model_validate({"selected": [draft_item(slots=slots)], "skipped": []})
+
+
+def _additional_properties(schema: object) -> list[object]:
+    found: list[object] = []
+    if isinstance(schema, dict):
+        if "additionalProperties" in schema:
+            found.append(schema["additionalProperties"])
+        for value in schema.values():
+            found += _additional_properties(value)
+    elif isinstance(schema, list):
+        for item in schema:
+            found += _additional_properties(item)
+    return found
+
+
+def test_llm_draft_schema_has_no_open_object_map() -> None:
+    """OpenAI strict structured output rejects dynamic `additionalProperties` (docs/OPEN_QUESTIONS.md Q10)."""
+    found = _additional_properties(LlmInsightDraft.model_json_schema())
+    assert found, "every object must be closed with additionalProperties: false"
+    assert all(value is False for value in found)
 
 
 def test_llm_draft_enforces_its_limits() -> None:

@@ -10,7 +10,13 @@ from ..contracts import CallType, LlmInsightDraft, LlmUsage
 from ..llm import FakeLlmClient, FakeReply, LlmClient, LlmSchemaError, LlmTransientError
 
 DRAFT = {
-    "selected": [{"candidate_ids": ["C1"], "template": "Căn {{unit}} tồn {{dom}}.", "slot_map": {"dom": "C1.dom"}}],
+    "selected": [
+        {
+            "candidate_ids": ["C1"],
+            "template": "Căn {{unit}} tồn {{dom}}.",
+            "slots": [{"slot": "unit", "ref": "C1.unit"}, {"slot": "dom", "ref": "C1.dom"}],
+        }
+    ],
     "skipped": [],
 }
 
@@ -44,7 +50,7 @@ async def test_fake_returns_the_scripted_output_validated_against_the_schema_and
     fake = FakeLlmClient([FakeReply(DRAFT, usage())])
     output, used = await call(fake)
     assert isinstance(output, LlmInsightDraft)
-    assert output.selected[0].slot_map == {"dom": "C1.dom"}
+    assert [s.ref for s in output.selected[0].slots] == ["C1.unit", "C1.dom"]
     assert used.cost_usd == Decimal("0.001")
     (recorded,) = fake.calls
     assert (recorded.system, recorded.user, recorded.schema, recorded.call_type, recorded.reasoning) == (

@@ -23,6 +23,7 @@ from pydantic import (
     PlainValidator,
     StringConstraints,
     WithJsonSchema,
+    field_validator,
 )
 
 
@@ -381,15 +382,47 @@ class InsightRef(Contract):
     materiality: Materiality
 
 
+class SlotRef(Contract):
+    """One `{{slot}}` of a draft template and the candidate slot that fills it.
+
+    A list of these replaces the spec's `slot_map` record: strict structured output rejects objects
+    with dynamic `additionalProperties` (docs/OPEN_QUESTIONS.md Q10).
+    """
+
+    slot: str
+    """Slot name in the template, e.g. "dom"."""
+    ref: str
+    """`<candidate_id>.<slot>`, e.g. "C-011-1.dom"."""
+
+    @field_validator("ref")
+    @classmethod
+    def _candidate_dot_slot(cls, ref: str) -> str:
+        candidate_id, dot, slot = ref.partition(".")
+        if not dot or not candidate_id or not slot or "." in slot:
+            raise ValueError(f"ref must be '<candidate_id>.<slot>' with exactly one dot, got {ref!r}")
+        return ref
+
+
 class DraftItem(Contract):
     candidate_ids: list[str] = Field(min_length=1)
     """Several candidates may be merged into one idea."""
     template: str = Field(max_length=400)
     """Sentence with `{{slot}}` placeholders."""
-    slot_map: dict[str, str]
-    """Slot name in the sentence → `<candidate_id>.<slot>`."""
+    slots: list[SlotRef]
+    # TODO(P2, GR-01/GR-03 in validation.py): every `{{slot}}` of `template` has a SlotRef and vice
+    # versa, and each ref names a candidate/slot given to the model. Checked per item by the
+    # validator, not here, so one bad item falls back to TEMPLATE instead of failing the whole draft.
     limitation_text: str | None = Field(default=None, max_length=300)
     recommendation_text: str | None = Field(default=None, max_length=300)
+
+    @field_validator("slots")
+    @classmethod
+    def _unique_slots(cls, slots: list[SlotRef]) -> list[SlotRef]:
+        names = [s.slot for s in slots]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(f"slot names must be unique within an item: {', '.join(duplicates)}")
+        return slots
 
 
 class SkippedItem(Contract):

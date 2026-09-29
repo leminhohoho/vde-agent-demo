@@ -11,8 +11,10 @@ English tower names pass, D-75), and the optional limitation and recommendation 
 | GR-02 | E12 | a `forbidden_phrases` phrase or a URL |
 | GR-03 | E11 | unknown candidate, a ref outside the item's candidates, a slot the candidate lacks, template slots ≠ slot refs |
 | GR-04 | SCOPE_VIOLATION | a literal unit code (`language.unit_code_pattern`): codes only come through slots |
-| GR-03 | E11 | unknown candidate, ref outside the item, slot the candidate lacks, template slots ≠ refs |
-| GR-04 | SCOPE_VIOLATION | a literal unit code (`language.unit_code_pattern`): codes come through slots |
+| GR-06 | IMPERATIVE_RECOMMENDATION | an imperative phrase or a missing "Đề xuất" / "Có thể cân nhắc" prefix |
+| GR-06 | RECOMMENDATION_NOT_ALLOWED | no action code (BR-10), market context only (BR-09) or a metric lookup |
+| GR-07 | STRONG_CLAIM_NOT_SIGNIFICANT | a strong comparison on a candidate that is not `significant` |
+| GR-07 | PEER_HIDDEN | peer numbers of a candidate with fewer than `describe_min` peers (D-71) |
 | GR-08 | LANGUAGE_MISMATCH | no Vietnamese diacritic, an English word, a cause code, or a cause item without `{{cause_label}}` |
 | 6.3 | SENTENCE_TOO_LONG | more than `language.max_words` words |
 

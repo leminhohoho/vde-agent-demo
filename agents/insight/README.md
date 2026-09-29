@@ -1,5 +1,7 @@
 # insight agent
 
+For the consolidated implementation status, contract, coding rules, test map, and open decisions, see [AGENT.md](AGENT.md). This README keeps the quick start and runtime configuration.
+
 Insight Agent v2 ([docs/insight_agent_spec.md](../../docs/insight_agent_spec.md), v2.1) explains why
 units, towers or projects sell slowly: root causes per unit, cause distribution, patterns, market
 context and data limitations. It works from a frozen data-pack snapshot. The LLM only writes

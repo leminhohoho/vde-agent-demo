@@ -215,3 +215,43 @@ def test_a_median_is_not_called_an_average() -> None:
     assert [v.code for v in bad] == ["MEDIAN_AS_MEAN"]
     good = validate_item(draft("Hướng {{group}} có DOM trung vị {{group_dom}}."), {c.candidate_id: c}, CFG, pctx.request)
     assert good == []
+
+
+# ---- labels of numbers are written by code (P5 polish) -------------------------------------------------
+
+
+def t2_candidate() -> InsightCandidate:
+    from ..candidates.t2_distribution import t2_candidates
+    from .builders import scope
+
+    data = dataset(
+        [unit(i) for i in range(1, 11)], [inventory(i, 100 + i) for i in range(1, 11)],
+        [diagnostic(i, 100 + i) for i in range(1, 11)], [cause(i, "OVERPRICED_VS_PEER") for i in range(1, 11)],
+    )  # fmt: skip
+    (c,) = t2_candidates(context(data, tasks=("T2",), analysis_scope=scope("ZONE", zone_ids=["ZN-AQUA-01"]))).candidates
+    return c
+
+
+def t2_item(template: str, c: InsightCandidate) -> DraftItem:
+    names = ["cause_label", "weighted_share", "unit_share", "overdue_units"]
+    slots = [{"slot": n, "ref": f"{c.candidate_id}.{n}"} for n in names if "{{" + n + "}}" in template]
+    return DraftItem.model_validate({"candidate_ids": [c.candidate_id], "template": template, "slots": slots})
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "{{cause_label}} ghi nhận tỷ trọng {{weighted_share}} trong các căn chậm.",  # Q2
+        "{{cause_label}} ảnh hưởng đến {{unit_share}} số căn.",  # Q3 "100% số căn"
+        "{{cause_label}} xuất hiện ở {{unit_share}} tổng số căn quá hạn.",
+    ],
+)
+def test_q2_q3_a_label_written_next_to_a_number_is_rejected(template: str) -> None:
+    c = t2_candidate()
+    assert "SLOT_LABEL_WRITTEN" in {v.code for v in validate_item(t2_item(template, c), {c.candidate_id: c}, CFG, request())}
+
+
+def test_a_number_left_to_its_code_label_passes() -> None:
+    c = t2_candidate()
+    it = t2_item("{{cause_label}} chiếm {{weighted_share}} và xuất hiện ở {{unit_share}}.", c)
+    assert validate_item(it, {c.candidate_id: c}, CFG, request()) == []

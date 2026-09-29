@@ -220,6 +220,9 @@ class LanguageConfig(_Config):
     quantity_word_exceptions: tuple[str, ...] = ()
     median_slots: tuple[str, ...] = ()
     mean_words: tuple[str, ...] = ()
+    slot_labels: dict[str, str] = {}
+    """Fixed label per ratio/count slot, `{value}` = the formatted number (rendered by code)."""
+    label_phrases: tuple[str, ...] = ()
     strong_comparison_phrases: tuple[str, ...]
     imperative_phrases: tuple[str, ...]
     recommendation_prefixes: tuple[str, ...]
@@ -236,6 +239,7 @@ class LanguageConfig(_Config):
         "quantity_words",
         "quantity_word_exceptions",
         "mean_words",
+        "label_phrases",
         "strong_comparison_phrases",
         "imperative_phrases",
         "recommendation_prefixes",
@@ -341,6 +345,9 @@ def load_semantic_config(path: Path) -> SemanticConfig:
             f"{path.name}: min_group_size ({params.min_group_size}) must equal peer_tiers.describe_min ({tiers.describe_min})"
         )
     lang = raw.language
+    for slot, label in lang.slot_labels.items():
+        if label.count("{value}") != 1:
+            raise ConfigError(f"{path.name}: language.slot_labels.{slot} must contain {{value}} once: {label!r}")
     for entry in raw.causes:
         if entry.action_code not in raw.action_texts:
             raise ConfigError(f"{path.name}: action_texts has no sentence for {entry.action_code}")

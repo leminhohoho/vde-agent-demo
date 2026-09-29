@@ -59,6 +59,12 @@ def _permit_status(candidate: InsightCandidate, cfg: SemanticConfig, view: Datas
     return None
 
 
+def labelled(slot: str, display: str, cfg: SemanticConfig) -> str:
+    """A number as the reader sees it: with its fixed label when the slot has one (`slot_labels`)."""
+    label = cfg.language.slot_labels.get(slot)
+    return label.replace("{value}", display) if label else display
+
+
 def label_for(slot: str, candidate: InsightCandidate, cfg: SemanticConfig, view: DatasetView) -> str | None:
     if slot not in cfg.language.label_slots:
         return None
@@ -96,7 +102,7 @@ def bind_claim(
         if numeric is not None:
             bound = numeric.model_copy(update={"slot": name})
             bindings.append(bound)
-            texts[name] = bound.display
+            texts[name] = labelled(slot, bound.display, cfg)
             continue
         label = label_for(slot, candidate, cfg, view)
         if label is None:
@@ -125,7 +131,8 @@ def _fill(template: str, texts: Mapping[str, str], numeric: set[str]) -> str:
             if repeat:
                 pos += repeat.end()
     out.append(template[pos:])
-    return "".join(out)
+    text = "".join(out)
+    return text[:1].upper() + text[1:]  # a sentence may start with a slot ("{{cause_label}} …")
 
 
 def fallback_template(candidate: InsightCandidate, cfg: SemanticConfig) -> str:

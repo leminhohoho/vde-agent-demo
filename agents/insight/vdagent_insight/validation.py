@@ -11,6 +11,7 @@ config (`action_texts`), never from the model.
 | GR-01 | E10 | a digit, or a `language.quantity_words` phrase, outside a slot |
 | GR-02 | E12 | a `forbidden_phrases` phrase or a URL |
 | GR-03 | E11 | unknown candidate, a ref outside the item's candidates, a slot the candidate lacks, template slots ≠ slot refs |
+| GR-01 | SLOT_LABEL_WRITTEN | a `label_phrases` phrase, or the slot's own code label, right next to a numeric slot |
 | GR-04 | SCOPE_VIOLATION | a literal unit code (`language.unit_code_pattern`): codes only come through slots |
 | GR-06 | (config) | `action_texts` must be suggestions: checked when the config is loaded (settings.py) |
 | GR-07 | STRONG_CLAIM_NOT_SIGNIFICANT | a strong comparison on a candidate that is not `significant` |
@@ -132,6 +133,26 @@ def _language(item: DraftItem, given: list[InsightCandidate], cfg: SemanticConfi
     return out
 
 
+def _slot_labels(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
+    """Numbers carry a label written by code (`slot_labels`): the model must not label them itself."""
+    lang = cfg.language
+    numeric = {s.slot: s.ref.partition(".")[2] for s in item.slots if s.ref.partition(".")[2] not in lang.label_slots}
+    out: list[Violation] = []
+    for m in SLOT.finditer(item.template):
+        if m.group(1) not in numeric:
+            continue
+        before = normalize_phrase(SLOT.sub(" ", item.template[: m.start()])).rstrip()
+        after = normalize_phrase(SLOT.sub(" ", item.template[m.end() :])).lstrip()
+        phrases = list(lang.label_phrases)
+        own = lang.slot_labels.get(numeric[m.group(1)], "").replace("{value}", "").strip()
+        if own:
+            phrases.append(normalize_phrase(" ".join(own.split()[:2])))
+        written = [p for p in phrases if before.endswith(p) or re.match(rf"{re.escape(p)}(?!\w)", after)]
+        if written:
+            out.append(Violation("GR-01", "SLOT_LABEL_WRITTEN", f"{{{{{m.group(1)}}}}} is labelled by code; remove {written}"))
+    return out
+
+
 def _statistic(item: DraftItem, cfg: SemanticConfig) -> list[Violation]:
     """A median slot (`language.median_slots`) must not be called an average."""
     lang = cfg.language
@@ -158,6 +179,7 @@ def validate_item(
         + _numbers_and_phrases(item, cfg)
         + _comparisons(item, given, cfg)
         + _language(item, given, cfg)
+        + _slot_labels(item, cfg)
         + _statistic(item, cfg)
         + _length(item, cfg)
     )

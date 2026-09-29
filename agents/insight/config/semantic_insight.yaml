@@ -57,14 +57,14 @@ semantic_config:
     # priority of a candidate without severity_rank (spec 6.4); T7 is always kept, its value is assumed.
     priority_without_rank: {value: {T2: "0.5", T3: "0.5", T5: "0.3", T7: "0"}, status: PENDING, source: "spec 6.4 (T7 assumed)"}
 
-  # Spec 7.6. action_code follows DW 4.3; recommendation_text is our draft (Sales Ops to review).
+  # Spec 7.6. action_code follows DW 4.3; its recommendation sentence is in `action_texts` below.
   # required/supplementary_evidence: spec 6.2 minimum evidence per cause (every T1 claim also binds
   # {{dom}} from fact_unit_inventory_snapshot.unsold_days_dom). A field without `unit` is evidence only.
   causes:
     - cause_code: LEGAL_PERMIT_BARRIER
       cause_label_vi: "vướng mắc pháp lý / giấy phép bán hàng"
       action_code: EXPEDITE_LEGAL_PROCEDURES
-      template: "Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}} quá hạn."
+      template: "Dự án {{project}} chưa đủ {{permit_status}}; {{cause_label}} là yếu tố có khả năng liên quan tới {{overdue_units}}."
       required_evidence:
         - {slot: permit, table: dim_project_profile, field: is_sales_permit_issued}
         - {slot: guarantee, table: dim_project_profile, field: is_bank_guarantee_issued}
@@ -139,7 +139,7 @@ semantic_config:
   # TEMPLATE fallback per insight_type (spec 8.2). ROOT_CAUSE_SIGNAL uses the per-cause template.
   # Drafts written for Phase 0 (assumed): Sales Ops to review the wording.
   insight_templates:
-    CAUSE_DISTRIBUTION: "Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}} tổng điểm quy nguyên nhân (có trọng số) và xuất hiện ở {{unit_share}} số căn quá hạn (đếm theo căn)."
+    CAUSE_DISTRIBUTION: "Trong {{scope}}, {{cause_label}} chiếm {{weighted_share}} và xuất hiện ở {{unit_share}}."
     PATTERN: "Nhóm {{group}} có DOM trung vị {{group_dom}}, so với {{rest_dom}} ở các căn còn lại; đây là mối liên hệ đi kèm, chưa phải kết luận về nguyên nhân."
     MARKET_CONTEXT: "Bối cảnh thị trường {{market}} trong {{window_months}} gần nhất: lãi suất thả nổi từ {{interest_rate_start}} đến {{interest_rate}}, tỷ lệ hấp thụ từ {{absorption_rate_start}} đến {{absorption_rate}}; thông tin này chỉ mang tính tham khảo."
     DATA_LIMITATION: "Dữ liệu cho {{subject}} còn hạn chế: {{limitation}}."
@@ -193,6 +193,21 @@ semantic_config:
     quantity_word_exceptions: ["tỷ lệ", "tỷ trọng", "tỷ suất", "phần trăm"]
     # Slots holding a median, and the words that would call it an average (P5, live).
     median_slots: [group_dom, rest_dom]
+    # Ratio / count slots are rendered with a fixed label written by code, never by the model (P5):
+    # "{value}" is the formatted number. The model must not write these labels itself.
+    slot_labels:
+      unit_share: "{value} số căn quá hạn"
+      weighted_share: "{value} tổng điểm quy nguyên nhân"
+      overdue_units: "{value} quá hạn"
+      units_with_cause: "{value} quá hạn mang yếu tố này"
+      units_diagnosed: "{value} quá hạn đã chẩn đoán"
+      group_overdue_rate: "{value} số căn chưa bán của nhóm đã quá hạn"
+      rest_overdue_rate: "{value} số căn chưa bán còn lại đã quá hạn"
+      coverage: "{value} số căn quá hạn có dữ liệu hợp lệ"
+      units_valid: "{value} hợp lệ"
+      units_in_scope: "{value} trong phạm vi"
+    # Phrases that label a number: never right before or after a numeric {{slot}} (SLOT_LABEL_WRITTEN).
+    label_phrases: ["số căn", "tổng số căn", "tỷ trọng", "tổng điểm"]
     mean_words: ["trung bình", "bình quân"]
     # GR-07: allowed only when every candidate of the item is `significant` (D-25).
     strong_comparison_phrases: ["cao hơn rõ", "thấp hơn rõ", "chậm hơn rõ", "nhanh hơn rõ", "vượt trội", "đáng kể", "khác biệt rõ", "nổi bật"]

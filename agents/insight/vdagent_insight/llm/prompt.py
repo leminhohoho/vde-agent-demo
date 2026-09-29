@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..contracts import InsightCandidate, InsightTaskRequest, LlmInsightDraft, MemoryContext
+from ..render import labelled
 from ..settings import LlmConfig, SemanticConfig
 from ..validation import Violation, hidden_peer_slots
 from .schema import provider_schema
@@ -86,7 +87,7 @@ def _candidate(alias: str, c: InsightCandidate, cfg: SemanticConfig) -> dict[str
         "level": c.level,
         "subject": c.subject.label,
         "cause_code": c.cause_code,
-        "slots": {name: c.slots[name].display for name in slots},
+        "slots": {name: labelled(name, c.slots[name].display, cfg) for name in slots},
         "refs": [f"{alias}.{s}" for s in [*slots, *_label_slots(c, cfg)]],
         "flags": c.dq_flags,
         "significant": c.significant,
